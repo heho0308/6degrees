@@ -1,207 +1,250 @@
 import streamlit as st
 import pandas as pd
-import re
-import random
+import requests
+from io import StringIO
+import time
 
-# ---------------------------
-# Helper Functions
-# ---------------------------
+# -----------------------------
+# MOCK DATABASES / STORAGE
+# -----------------------------
+# For demonstration purposes, we'll store everything in memory.
+# In a real app, these would be replaced by proper databases.
 
-def extract_linkedin_connections(csv_file):
+# Example structure for storing user data
+mock_users = {
+    "alice@example.com": {
+        "password": "password123",
+        "role": "Employee",
+        "connections": []  # Will store dictionaries describing connections
+    },
+    "bob@example.com": {
+        "password": "securepwd",
+        "role": "Recruiter",
+        "connections": []  # Recruiters may also have connections, if needed
+    }
+}
+
+# Store recruiters' previous searches here
+recruiter_search_history = {
+    "bob@example.com": []  # Example: each item in list: {'criteria': ..., 'results': ...}
+}
+
+# Store rating data. For demonstration we store them as a list of (candidate_name, rating).
+candidate_ratings = []
+
+# -----------------------------
+# HELPER FUNCTIONS
+# -----------------------------
+def parse_job_posting_from_url(url: str):
     """
-    Reads the CSV file uploaded by the employee.  
-    **Steps to retrieve your LinkedIn connections:**
-      1. Log in to your LinkedIn account.
-      2. Click on 'My Network' then 'Connections'.
-      3. Click on 'Manage synced and imported contacts'.
-      4. Click 'Export Contacts' and select 'Connections'.
-      5. Download the CSV file and then upload it here.
+    Mock function to simulate retrieving job criteria from a URL.
+    In a real scenario, you might scrape or call an API to parse the job details.
+    We'll return some placeholder criteria for demonstration.
+    """
+    # Simulate a small delay
+    time.sleep(1)
     
-    The CSV file should contain columns like "Name", "Title", "Company", "Experience", "Education", and "Industry".
-    """
-    df = pd.read_csv(csv_file)
-    return df
-
-def extract_job_criteria(job_url):
-    """
-    In a production system, this function would scrape the provided URL and use NLP
-    to extract key job criteria such as job title, required experience, skills, education, etc.
-    
-    For demonstration, we simulate this extraction with dummy criteria.
-    """
+    # Placeholder data
+    # In real life, you'd parse the HTML or use a job API to get these details.
     criteria = {
-        "job_title": "Software Engineer",
-        "required_experience": "3+ years",
-        "skills": ["Python", "Machine Learning", "Data Structures"],
-        "education": "Bachelor's in Computer Science",
+        "title": "Software Engineer",
+        "industry": "Tech",
         "seniority": "Mid-level",
-        "industry": "Technology"
+        "skills": ["Python", "Django", "REST APIs"]
     }
     return criteria
 
-def match_candidates(connections_df, criteria):
+def find_best_candidates(connections, job_criteria, top_n=5):
     """
-    Simulates candidate matching by scoring each connection.  
-    We assume the CSV has columns: Name, Title, Company, Experience, Education, Industry.
+    Given a list of connections and some job criteria, return a
+    list of the top N candidate dictionaries plus an explanation.
     
-    Scoring criteria:
-      - +50 points if the candidate's Title contains the job title.
-      - +20 points if Experience is 3+ years.
-      - +15 points if the candidate's Education matches.
-      - +15 points if the Industry matches.
-    
-    The top 5 scoring candidates are returned.
+    The logic here is naive. In real applications, you'd implement
+    more sophisticated matching (e.g., text similarity, ML ranking).
     """
-    if connections_df is None or connections_df.empty:
-        return pd.DataFrame()
     
-    def score_candidate(row):
+    # We'll simply assign a score for each connection based on matching
+    # title, seniority, industry, or any skills in job_criteria.
+    scored_candidates = []
+    for c in connections:
         score = 0
-        # Check job title match
-        if criteria["job_title"].lower() in str(row.get("Title", "")).lower():
-            score += 50
-        # Check experience: assume Experience is numeric (years)
-        try:
-            exp = float(row.get("Experience", 0))
-            if exp >= 3:
-                score += 20
-        except Exception:
-            pass
-        # Check education match
-        if criteria["education"].lower() in str(row.get("Education", "")).lower():
-            score += 15
-        # Check industry match
-        if criteria["industry"].lower() in str(row.get("Industry", "")).lower():
-            score += 15
-        return score
+        explanation_parts = []
+        
+        # Check same or similar job title
+        # We'll do a naive "substring" check here
+        if 'title' in c and c['title'] and job_criteria.get('title', '').lower() in c['title'].lower():
+            score += 2
+            explanation_parts.append("Has a matching job title")
+        
+        # Check seniority
+        if 'seniority' in c and c['seniority'] and (job_criteria.get('seniority', '').lower() in c['seniority'].lower()):
+            score += 2
+            explanation_parts.append("Matches seniority level")
+        
+        # Check industry
+        if 'industry' in c and c['industry'] and (job_criteria.get('industry', '').lower() in c['industry'].lower()):
+            score += 2
+            explanation_parts.append("Has experience in the same industry")
+        
+        # Check skill overlap
+        if 'skills' in c:
+            matched_skills = set(c['skills']).intersection(set(job_criteria.get('skills', [])))
+            if matched_skills:
+                score += len(matched_skills)
+                explanation_parts.append(f"Has matching skills: {', '.join(matched_skills)}")
+        
+        # If score > 0, consider them in results
+        if score > 0:
+            scored_candidates.append({
+                "connection": c,
+                "score": score,
+                "explanation": "; ".join(explanation_parts) if explanation_parts else "Some relevant match"
+            })
     
-    connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
-    filtered_df = connections_df[connections_df["match_score"] > 0]
-    filtered_df = filtered_df.sort_values(by="match_score", ascending=False).head(5)
-    return filtered_df
+    # Sort by score descending
+    scored_candidates.sort(key=lambda x: x['score'], reverse=True)
+    
+    # Return top N
+    return scored_candidates[:top_n]
 
-def get_reasoning(candidate, criteria):
-    """
-    Provides a short explanation for why a candidate is a match.
-    """
-    reasons = []
-    if criteria["job_title"].lower() in str(candidate.get("Title", "")).lower():
-        reasons.append("Job title matches.")
-    try:
-        exp = float(candidate.get("Experience", 0))
-        if exp >= 3:
-            reasons.append("Has sufficient experience.")
-    except Exception:
-        pass
-    if criteria["education"].lower() in str(candidate.get("Education", "")).lower():
-        reasons.append("Educational background fits.")
-    if criteria["industry"].lower() in str(candidate.get("Industry", "")).lower():
-        reasons.append("Industry experience is relevant.")
-    return " ".join(reasons) if reasons else "No specific matching criteria found."
-
-# ---------------------------
-# Streamlit Application
-# ---------------------------
-
+# -----------------------------
+# STREAMLIT UI
+# -----------------------------
 def main():
-    st.title("Employee & Recruiter Networking App")
-
-    # ---------------------------
-    # Sidebar: User Panel & Navigation
-    # ---------------------------
-    st.sidebar.title("User Panel")
-    role = st.sidebar.selectbox("Select Role", ["Employee", "Recruiter"])
-    username = st.sidebar.text_input("Enter your username", value="user1")
-    st.sidebar.write(f"Logged in as: **{username}** ({role})")
-
-    # Store previous searches in session_state if not already stored.
-    if "previous_searches" not in st.session_state:
-        st.session_state.previous_searches = []
-
-    st.sidebar.subheader("Previous Searches")
-    if st.session_state.previous_searches:
-        for search in st.session_state.previous_searches:
-            st.sidebar.write(search)
-    else:
-        st.sidebar.write("No previous searches.")
-
-    # ---------------------------
-    # Employee View
-    # ---------------------------
-    if role == "Employee":
-        st.header("Employee Dashboard: Upload Your LinkedIn Connections")
-        st.write("""
-        **How to Retrieve Your LinkedIn Connections CSV:**
-        1. Log in to LinkedIn.
-        2. Navigate to **My Network** and click on **Connections**.
-        3. Click **Manage synced and imported contacts**.
-        4. Click **Export Contacts** and select **Connections**.
-        5. Download the CSV file and upload it below.
-        """)
-        uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
-        if uploaded_file is not None:
-            try:
-                connections_df = extract_linkedin_connections(uploaded_file)
-                st.success("Connections uploaded successfully!")
-                st.dataframe(connections_df.head())
-                # Store connections in session state for later use by recruiters
-                st.session_state.connections_df = connections_df
-            except Exception as e:
-                st.error(f"Error processing file: {e}")
-
-    # ---------------------------
-    # Recruiter View
-    # ---------------------------
-    else:  # role == "Recruiter"
-        st.header("Recruiter Dashboard: Map Job Criteria Against Employee Connections")
-        job_url = st.text_input("Paste the URL of the Open Job Posting")
-        if st.button("Extract Job Criteria"):
-            if job_url:
-                criteria = extract_job_criteria(job_url)
-                st.session_state.current_criteria = criteria
-                st.success("Job criteria extracted!")
-                st.write("Extracted Criteria:")
-                st.json(criteria)
-                # Save job URL to previous searches.
-                st.session_state.previous_searches.append(job_url)
+    st.title("Employee Network Matching")
+    st.write("Connect your network with open positions.")
+    
+    # Sidebar
+    st.sidebar.title("Navigation")
+    
+    # Check if user is logged in
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+        st.session_state.user_email = None
+    
+    if not st.session_state.logged_in:
+        # Show login UI
+        st.header("Login")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            if email in mock_users and mock_users[email]['password'] == password:
+                st.session_state.logged_in = True
+                st.session_state.user_email = email
+                st.success(f"Logged in as {email}")
             else:
-                st.error("Please enter a job URL.")
+                st.error("Invalid email or password.")
+        return  # Stop here if not logged in
+    
+    # If logged in, show user info and role
+    user_data = mock_users[st.session_state.user_email]
+    user_role = user_data["role"]
+    
+    st.sidebar.write(f"**User**: {st.session_state.user_email}")
+    st.sidebar.write(f"**Role**: {user_role}")
+    
+    # Show a link to let user log out
+    if st.sidebar.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.user_email = None
+        st.experimental_rerun()
+    
+    # Show previous searches if user is a recruiter
+    if user_role == "Recruiter":
+        st.sidebar.subheader("Previous Searches")
+        history = recruiter_search_history.get(st.session_state.user_email, [])
+        for i, h in enumerate(history):
+            st.sidebar.write(f"Search {i+1}: {h['criteria'].get('title', 'No Title')} - {h['criteria'].get('seniority', '')}")
+    
+    # Show main content based on role
+    if user_role == "Employee":
+        show_employee_ui(user_data)
+    else:
+        show_recruiter_ui(user_data)
 
-        # Allow recruiter to review and edit the criteria.
-        if "current_criteria" in st.session_state:
-            st.subheader("Review and Edit Job Criteria")
-            criteria = st.session_state.current_criteria
-            criteria["job_title"] = st.text_input("Job Title", value=criteria.get("job_title", ""))
-            criteria["required_experience"] = st.text_input("Required Experience", value=criteria.get("required_experience", ""))
-            criteria["education"] = st.text_input("Education Requirement", value=criteria.get("education", ""))
-            criteria["seniority"] = st.text_input("Seniority Level", value=criteria.get("seniority", ""))
-            criteria["industry"] = st.text_input("Industry", value=criteria.get("industry", ""))
-            skills = st.text_area("Skills (comma separated)", value=", ".join(criteria.get("skills", [])))
-            criteria["skills"] = [skill.strip() for skill in skills.split(",") if skill.strip()]
-            st.session_state.current_criteria = criteria
-
-            if st.button("Find Matching Candidates"):
-                # Retrieve employee connections stored earlier by an employee.
-                if "connections_df" in st.session_state:
-                    connections_df = st.session_state.connections_df
-                    matching_candidates = match_candidates(connections_df, criteria)
-                    if not matching_candidates.empty:
-                        st.subheader("Top 5 Matching Candidates")
-                        for idx, row in matching_candidates.iterrows():
-                            st.markdown(f"### {row['Name']}")
-                            st.write(f"**Title:** {row['Title']}")
-                            st.write(f"**Company:** {row['Company']}")
-                            st.write(f"**Match Score:** {row['match_score']}")
-                            reasoning = get_reasoning(row, criteria)
-                            st.write(f"**Reasoning:** {reasoning}")
-                            # Allow recruiter to rate the suggestion.
-                            rating = st.slider(f"Rate candidate {row['Name']}", 1, 5, 3, key=f"rating_{idx}")
-                            st.write(f"Your rating: {rating}")
-                            # In a production system, the ratings would be stored and used for improving the matching algorithm.
-                    else:
-                        st.error("No matching candidates found. Please check the uploaded connections or adjust the criteria.")
+def show_employee_ui(user_data):
+    st.subheader("Upload Your LinkedIn Connections (CSV)")
+    uploaded_file = st.file_uploader("Select CSV file", type=["csv"])
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        st.write("Preview of CSV:")
+        st.write(df.head())
+        
+        # Convert the dataframe into a structure we can store
+        # Suppose the CSV has columns: First Name, Last Name, Email Address, Current Position, Industry, ...
+        # Adjust to your actual LinkedIn export schema
+        connections_list = []
+        for index, row in df.iterrows():
+            connections_list.append({
+                "name": f"{row.get('First Name', '')} {row.get('Last Name', '')}",
+                "email": row.get("Email Address", ""),
+                "title": row.get("Position", ""),
+                "industry": row.get("Industry", ""),
+                "seniority": row.get("Seniority", ""),
+                # Possibly parse out skills or store custom data
+                "skills": row.get("Skills", "").split(';') if "Skills" in row else []
+            })
+        
+        # Store in mock_users
+        mock_users[st.session_state.user_email]["connections"] = connections_list
+        st.success("Connections uploaded successfully.")
+        
+    # Show number of connections if any
+    current_connections = mock_users[st.session_state.user_email]["connections"]
+    st.write(f"Total Connections: {len(current_connections)}")
+    
+def show_recruiter_ui(user_data):
+    st.subheader("Paste a URL for an Open Job Posting")
+    job_url = st.text_input("Job Posting URL")
+    if st.button("Fetch Job Criteria"):
+        if job_url:
+            job_criteria = parse_job_posting_from_url(job_url)
+            
+            # Let recruiter review & edit criteria
+            st.write("**Fetched Criteria (Editable):**")
+            title = st.text_input("Job Title", value=job_criteria.get('title', ''))
+            industry = st.text_input("Industry", value=job_criteria.get('industry', ''))
+            seniority = st.text_input("Seniority", value=job_criteria.get('seniority', ''))
+            skills = st.text_input("Skills (comma-separated)", value=", ".join(job_criteria.get('skills', [])))
+            
+            if st.button("Confirm Criteria"):
+                edited_criteria = {
+                    "title": title,
+                    "industry": industry,
+                    "seniority": seniority,
+                    "skills": [s.strip() for s in skills.split(',')]
+                }
+                
+                # Now we do the matching
+                all_employees_connections = []
+                # For a real app, you'd query all "Employee" accounts.
+                # For simplicity, let's just iterate all mock_users
+                for email, data in mock_users.items():
+                    if data["role"] == "Employee":
+                        all_employees_connections.extend(data["connections"])
+                
+                results = find_best_candidates(all_employees_connections, edited_criteria, top_n=5)
+                
+                # Save to search history
+                recruiter_search_history[st.session_state.user_email].append({
+                    "criteria": edited_criteria,
+                    "results": results
+                })
+                
+                st.write("### Top 5 Candidates")
+                if not results:
+                    st.write("No matches found.")
                 else:
-                    st.error("No employee connections found. Please ask an employee to upload their connections.")
-
-if __name__ == "__main__":
-    main()
+                    for i, r in enumerate(results, start=1):
+                        c = r["connection"]
+                        st.markdown(f"**{i}. {c['name']}** (Score: {r['score']})")
+                        st.write(f"Title: {c['title']}, Industry: {c['industry']}, Seniority: {c.get('seniority', 'N/A')}")
+                        st.write(f"Explanation: {r['explanation']}")
+                        
+                        # Add a rating option
+                        rating = st.slider(f"Rate the suitability of {c['name']}", 1, 5, 3, key=f"rating_{i}")
+                        if st.button(f"Submit Rating for {c['name']}", key=f"btn_{i}"):
+                            candidate_ratings.append((c['name'], rating))
+                            st.success(f"Submitted rating {rating} for {c['name']}")
+        else:
+            st.warning("Please enter a valid URL.")
