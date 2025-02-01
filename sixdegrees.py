@@ -4,7 +4,7 @@ import re
 import random
 import requests
 from bs4 import BeautifulSoup
-import spacy
+from textblob import TextBlob
 import nltk
 from nltk.corpus import stopwords
 from datetime import datetime
