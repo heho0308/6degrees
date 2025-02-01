@@ -6,8 +6,7 @@ lxml
 spacy==3.7.2
 nltk
 thinc==8.2.1
-numpy==1.26.3
+numpy==1.26.4
 cython
-setuptools>=65.5.0
+setuptools>=58.0.4
 wheel
-en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.2/en_core_web_sm-3.7.2.tar.gz
