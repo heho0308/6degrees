@@ -4,7 +4,6 @@ import re
 import random
 import requests
 from bs4 import BeautifulSoup
-import subprocess
 import spacy
 import nltk
 from nltk.corpus import stopwords
@@ -12,12 +11,8 @@ from nltk.corpus import stopwords
 # Ensure necessary NLP resources are installed
 nltk.download("stopwords")
 
-# Ensure the spaCy model is installed
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-    nlp = spacy.load("en_core_web_sm")
+# Load SpaCy model (installed via requirements.txt)
+nlp = spacy.load("en_core_web_sm")
 
 # ---------------------------
 # Helper Functions
@@ -190,8 +185,6 @@ def main():
                             st.write(f"**Position:** {row['Position']}")
                             st.write(f"**Company:** {row['Company']}")
                             st.write(f"**Match Score:** {row['match_score']}")
-                            rating = st.slider(f"Rate candidate {row['First Name']} {row['Last Name']}", 1, 5, 3, key=f"rating_{idx}")
-                            st.write(f"Your rating: {rating}")
                     else:
                         st.error("No matching candidates found.")
                 else:
