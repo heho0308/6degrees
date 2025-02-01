@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 import spacy
 import nltk
 from nltk.corpus import stopwords
+from datetime import datetime
 
 # Ensure necessary NLP resources are installed
 nltk.download("stopwords")
@@ -111,17 +112,43 @@ def extract_job_criteria(url):
 
 def match_candidates(connections_df, criteria):
     """
-    Matches candidates based on job criteria.
+    Matches candidates based on:
+      - Current role/title
+      - Industry
+      - Recency of experience (Max 5 years for senior, 2 years for junior)
+      - Skills and Education match
     """
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
-    
+
+    current_year = datetime.now().year
+
     def score_candidate(row):
         score = 0
+        last_active_year = row.get("Connected On", None)
+        if pd.isnull(last_active_year):
+            return 0  # Ignore if we don't have date data
+
+        last_active_year = last_active_year.year
+
+        # Experience filter
+        if "Senior" in criteria["seniority"] and (current_year - last_active_year > 5):
+            return 0
+        if "Junior" in criteria["seniority"] and (current_year - last_active_year > 2):
+            return 0
+
+        # Job Title match
         if criteria["job_title"].lower() in str(row.get("Position", "")).lower():
             score += 50
+
+        # Industry match
+        if criteria["industry"].lower() in str(row.get("Company", "")).lower():
+            score += 25
+
+        # Education match
         if criteria["education"].lower() in str(row.get("Company", "")).lower():
             score += 15
+
         return score
     
     connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
@@ -140,14 +167,6 @@ def main():
     username = st.sidebar.text_input("Enter your username", value="user1")
     st.sidebar.write(f"Logged in as: **{username}** ({role})")
 
-    if "previous_searches" not in st.session_state:
-        st.session_state.previous_searches = []
-
-    st.sidebar.subheader("Previous Searches")
-    if st.session_state.previous_searches:
-        for search in st.session_state.previous_searches:
-            st.sidebar.write(search)
-
     if role == "Employee":
         st.header("Upload Your LinkedIn Connections")
         uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
@@ -164,33 +183,14 @@ def main():
         if st.button("Extract Job Criteria"):
             if job_url:
                 criteria = extract_job_criteria(job_url)
-                if criteria:
-                    st.session_state.current_criteria = criteria
-                    st.success("Job criteria extracted!")
-                    st.json(criteria)
-                    st.session_state.previous_searches.append(job_url)
-            else:
-                st.error("Please enter a job URL.")
+                st.session_state.current_criteria = criteria
 
         if "current_criteria" in st.session_state:
-            st.subheader("Review and Edit Job Criteria")
-            criteria = st.session_state.current_criteria
-            criteria["job_title"] = st.text_input("Job Title", value=criteria.get("job_title", ""))
-            criteria["required_experience"] = st.text_input("Required Experience", value=criteria.get("required_experience", ""))
-            criteria["education"] = st.text_input("Education Requirement", value=criteria.get("education", ""))
-            criteria["seniority"] = st.text_input("Seniority Level", value=criteria.get("seniority", ""))
-            criteria["industry"] = st.text_input("Industry", value=criteria.get("industry", ""))
-            skills = st.text_area("Skills (comma separated)", value=", ".join(criteria.get("skills", [])))
-            criteria["skills"] = [skill.strip() for skill in skills.split(",") if skill.strip()]
-            st.session_state.current_criteria = criteria
-
             if st.button("Find Matching Candidates"):
                 if "connections_df" in st.session_state:
                     connections_df = st.session_state.connections_df
-                    matching_candidates = match_candidates(connections_df, criteria)
+                    matching_candidates = match_candidates(connections_df, st.session_state.current_criteria)
                     st.dataframe(matching_candidates)
-                else:
-                    st.error("No employee connections found.")
 
 if __name__ == "__main__":
     main()
