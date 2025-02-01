@@ -1,6 +1,7 @@
 streamlit
 pandas
-BeautifulSoup
+requests
+beautifulsoup4
+lxml
 spacy
 nltk
-stopwords
