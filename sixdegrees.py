@@ -173,20 +173,22 @@ def main():
                 st.error("Please enter a job URL.")
 
         if "current_criteria" in st.session_state:
+            st.subheader("Review and Edit Job Criteria")
             criteria = st.session_state.current_criteria
+            criteria["job_title"] = st.text_input("Job Title", value=criteria.get("job_title", ""))
+            criteria["required_experience"] = st.text_input("Required Experience", value=criteria.get("required_experience", ""))
+            criteria["education"] = st.text_input("Education Requirement", value=criteria.get("education", ""))
+            criteria["seniority"] = st.text_input("Seniority Level", value=criteria.get("seniority", ""))
+            criteria["industry"] = st.text_input("Industry", value=criteria.get("industry", ""))
+            skills = st.text_area("Skills (comma separated)", value=", ".join(criteria.get("skills", [])))
+            criteria["skills"] = [skill.strip() for skill in skills.split(",") if skill.strip()]
+            st.session_state.current_criteria = criteria
+
             if st.button("Find Matching Candidates"):
                 if "connections_df" in st.session_state:
                     connections_df = st.session_state.connections_df
                     matching_candidates = match_candidates(connections_df, criteria)
-                    if not matching_candidates.empty:
-                        st.subheader("Top 5 Matching Candidates")
-                        for idx, row in matching_candidates.iterrows():
-                            st.markdown(f"### {row['First Name']} {row['Last Name']}")
-                            st.write(f"**Position:** {row['Position']}")
-                            st.write(f"**Company:** {row['Company']}")
-                            st.write(f"**Match Score:** {row['match_score']}")
-                    else:
-                        st.error("No matching candidates found.")
+                    st.dataframe(matching_candidates)
                 else:
                     st.error("No employee connections found.")
 
