@@ -13,11 +13,16 @@ from fuzzywuzzy import fuzz
 # Ensure necessary NLP resources are installed
 nltk.download("stopwords")
 
-# Load SpaCy model (installed via requirements.txt)
 import spacy
+import subprocess
 
-# Directly load the model (pre-installed via requirements.txt)
-nlp = spacy.load("en_core_web_sm")
+# Ensure the spaCy model is installed
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"], check=True)
+    nlp = spacy.load("en_core_web_sm")
+
 
 
 
