@@ -3,11 +3,11 @@ pandas
 requests
 beautifulsoup4
 lxml
-spacy==3.5.0
+spacy==3.7.2
 nltk
-thinc>=8.1.10
-numpy>=1.24.0
+thinc==8.2.1
+numpy==1.26.3
 cython
-setuptools>=58.0.4
+setuptools>=65.5.0
 wheel
-en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.5.0/en_core_web_sm-3.5.0.tar.gz
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.2/en_core_web_sm-3.7.2.tar.gz
