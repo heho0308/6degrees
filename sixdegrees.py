@@ -7,19 +7,73 @@ import random
 # Helper Functions
 # ---------------------------
 
+def clean_csv_data(df):
+    """
+    Cleans the CSV data to ensure that it is in the correct format:
+      - Standardize column names by stripping whitespace and lower-casing.
+      - Remove duplicate rows.
+      - Drop rows missing critical columns.
+      - Clean 'Experience' column to be numeric when possible.
+      - Trim extra whitespace in string columns.
+    """
+    # Standardize column names
+    df.columns = [col.strip().lower() for col in df.columns]
+    
+    # Define expected columns and their cleaned names
+    expected_columns = {
+        "name": "Name",
+        "title": "Title",
+        "company": "Company",
+        "experience": "Experience",
+        "education": "Education",
+        "industry": "Industry"
+    }
+    
+    # Rename columns if found in the CSV
+    df.rename(columns={col: expected_columns[col] for col in expected_columns if col in df.columns}, inplace=True)
+    
+    # Drop duplicates
+    df.drop_duplicates(inplace=True)
+    
+    # Drop rows that do not have critical information (Name and Title)
+    df.dropna(subset=["Name", "Title"], inplace=True)
+    
+    # Clean up string columns: trim whitespace
+    for col in ["Name", "Title", "Company", "Education", "Industry"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+    
+    # Convert 'Experience' to numeric, if possible. If not, set to 0.
+    if "Experience" in df.columns:
+        def parse_experience(exp):
+            try:
+                # Remove non-numeric characters (e.g., "years", "yrs", etc.)
+                num = re.findall(r"[\d\.]+", str(exp))
+                return float(num[0]) if num else 0
+            except Exception:
+                return 0
+        df["Experience"] = df["Experience"].apply(parse_experience)
+    else:
+        # Create a default 'Experience' column if missing
+        df["Experience"] = 0
+    
+    return df
+
 def extract_linkedin_connections(csv_file):
     """
-    Reads the CSV file uploaded by the employee.  
-    **Steps to retrieve your LinkedIn connections:**
+    Reads the CSV file uploaded by the employee, cleans it, and returns a cleaned DataFrame.
+    
+    **Steps to retrieve your LinkedIn connections CSV:**
       1. Log in to your LinkedIn account.
       2. Click on 'My Network' then 'Connections'.
       3. Click on 'Manage synced and imported contacts'.
       4. Click 'Export Contacts' and select 'Connections'.
       5. Download the CSV file and then upload it here.
     
-    The CSV file should contain columns like "Name", "Title", "Company", "Experience", "Education", and "Industry".
+    The CSV file should ideally include columns like "Name", "Title", "Company", "Experience", "Education", and "Industry".
     """
     df = pd.read_csv(csv_file)
+    df = clean_csv_data(df)
     return df
 
 def extract_job_criteria(job_url):
@@ -142,7 +196,7 @@ def main():
         if uploaded_file is not None:
             try:
                 connections_df = extract_linkedin_connections(uploaded_file)
-                st.success("Connections uploaded successfully!")
+                st.success("Connections uploaded and cleaned successfully!")
                 st.dataframe(connections_df.head())
                 # Store connections in session state for later use by recruiters
                 st.session_state.connections_df = connections_df
