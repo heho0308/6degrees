@@ -4,13 +4,20 @@ import re
 import random
 import requests
 from bs4 import BeautifulSoup
+import subprocess
 import spacy
 import nltk
 from nltk.corpus import stopwords
 
-# Download necessary NLP resources
+# Ensure necessary NLP resources are installed
 nltk.download("stopwords")
-nlp = spacy.load("en_core_web_sm")
+
+# Ensure the spaCy model is installed
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+    nlp = spacy.load("en_core_web_sm")
 
 # ---------------------------
 # Helper Functions
