@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import re
-import random
 import requests
 from bs4 import BeautifulSoup
 from textblob import TextBlob
@@ -12,55 +11,7 @@ from fuzzywuzzy import fuzz
 
 # Ensure necessary NLP resources are installed
 nltk.download("stopwords")
-
-from textblob import TextBlob
-
-def extract_job_criteria(url):
-    """
-    Extracts job title, experience, skills, and education using TextBlob & Regex.
-    """
-    job_desc = extract_job_description(url)
-    if not job_desc:
-        return None
-
-    # Use TextBlob for NLP processing
-    blob = TextBlob(job_desc)
-
-    # Extract job title (First noun phrase)
-    job_title = blob.noun_phrases[0] if blob.noun_phrases else "Not Found"
-
-    # Extract required years of experience (Regex)
-    experience_match = re.search(r"(\d+)\+?\s*(?:years|yrs|YRS)", job_desc, re.IGNORECASE)
-    required_experience = f"{experience_match.group(1)}+ years" if experience_match else "Not specified"
-
-    # Extract key skills (Matching against common skills list)
-    common_skills = ["Python", "SQL", "Java", "JavaScript", "Machine Learning", "Data Science", "Leadership"]
-    skills_found = set(word for word in blob.words if word in common_skills)
-
-    # Extract education requirements (Regex)
-    education_match = re.search(r"(Bachelor's|Master's|PhD) in ([A-Za-z ]+)", job_desc, re.IGNORECASE)
-    education = f"{education_match.group(1)} in {education_match.group(2)}" if education_match else "Not specified"
-
-    # Extract industry
-    industry_keywords = ["Technology", "Finance", "Healthcare", "Education", "Retail", "Marketing"]
-    industry = next((word for word in industry_keywords if word.lower() in job_desc.lower()), "Not specified")
-
-    # Extract seniority level
-    seniority_levels = ["Entry-level", "Mid-level", "Senior", "Manager", "Director", "Executive"]
-    seniority = next((level for level in seniority_levels if level.lower() in job_desc.lower()), "Not specified")
-
-    return {
-        "job_title": job_title,
-        "required_experience": required_experience,
-        "skills": list(skills_found),
-        "education": education,
-        "seniority": seniority,
-        "industry": industry
-    }
-
-
-
-
+nltk.download("punkt")
 
 # ---------------------------
 # Helper Functions
@@ -118,37 +69,40 @@ def extract_job_description(url):
 
 def extract_job_criteria(url):
     """
-    Extracts structured job criteria (title, experience, skills, education) from a job posting URL.
+    Extracts job title, experience, skills, and education using TextBlob & Regex.
     """
     job_desc = extract_job_description(url)
     if not job_desc:
         return None
 
-    doc = nlp(job_desc)
+    # Use TextBlob for NLP processing
+    blob = TextBlob(job_desc)
 
-    job_title = None
-    for token in doc:
-        if token.pos_ == "NOUN" and token.text.istitle():
-            job_title = token.text
-            break
+    # Extract job title (First noun phrase)
+    job_title = blob.noun_phrases[0] if blob.noun_phrases else "Not Found"
 
+    # Extract required years of experience (Regex)
     experience_match = re.search(r"(\d+)\+?\s*(?:years|yrs|YRS)", job_desc, re.IGNORECASE)
     required_experience = f"{experience_match.group(1)}+ years" if experience_match else "Not specified"
 
+    # Extract key skills (Matching against common skills list)
     common_skills = ["Python", "SQL", "Java", "JavaScript", "Machine Learning", "Data Science", "Leadership"]
-    skills_found = set(token.text for token in doc if token.text in common_skills)
+    skills_found = set(word for word in blob.words if word in common_skills)
 
+    # Extract education requirements (Regex)
     education_match = re.search(r"(Bachelor's|Master's|PhD) in ([A-Za-z ]+)", job_desc, re.IGNORECASE)
     education = f"{education_match.group(1)} in {education_match.group(2)}" if education_match else "Not specified"
 
+    # Extract industry
     industry_keywords = ["Technology", "Finance", "Healthcare", "Education", "Retail", "Marketing"]
     industry = next((word for word in industry_keywords if word.lower() in job_desc.lower()), "Not specified")
 
+    # Extract seniority level
     seniority_levels = ["Entry-level", "Mid-level", "Senior", "Manager", "Director", "Executive"]
     seniority = next((level for level in seniority_levels if level.lower() in job_desc.lower()), "Not specified")
 
     return {
-        "job_title": job_title if job_title else "Not found",
+        "job_title": job_title,
         "required_experience": required_experience,
         "skills": list(skills_found),
         "education": education,
