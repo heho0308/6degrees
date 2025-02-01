@@ -3,8 +3,8 @@ pandas
 requests
 beautifulsoup4
 lxml
-spacy==3.7.2
 nltk
+textblob
 thinc==8.2.1
 numpy==1.26.4
 cython
