@@ -8,6 +8,7 @@ import spacy
 import nltk
 from nltk.corpus import stopwords
 from datetime import datetime
+from fuzzywuzzy import fuzz
 
 # Ensure necessary NLP resources are installed
 nltk.download("stopwords")
@@ -22,7 +23,6 @@ nlp = spacy.load("en_core_web_sm")
 def clean_csv_data(df):
     """
     Cleans LinkedIn connections CSV:
-      - Skips introductory rows
       - Standardizes column names
       - Trims whitespace from fields
       - Converts dates properly
@@ -113,7 +113,7 @@ def extract_job_criteria(url):
 def match_candidates(connections_df, criteria):
     """
     Matches candidates based on:
-      - Current role/title
+      - Current role/title (using fuzzy matching)
       - Industry
       - Recency of experience (Max 5 years for senior, 2 years for junior)
       - Skills and Education match
@@ -131,14 +131,15 @@ def match_candidates(connections_df, criteria):
 
         last_active_year = last_active_year.year
 
-        # Experience filter
+        # Experience filter based on seniority
         if "Senior" in criteria["seniority"] and (current_year - last_active_year > 5):
             return 0
         if "Junior" in criteria["seniority"] and (current_year - last_active_year > 2):
             return 0
 
-        # Job Title match
-        if criteria["job_title"].lower() in str(row.get("Position", "")).lower():
+        # Job Title Fuzzy Match
+        title_similarity = fuzz.token_sort_ratio(criteria["job_title"], str(row.get("Position", "")))
+        if title_similarity > 60:
             score += 50
 
         # Industry match
