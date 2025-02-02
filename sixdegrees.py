@@ -3,15 +3,12 @@ import pandas as pd
 import re
 import requests
 from bs4 import BeautifulSoup
-from textblob import TextBlob
 import nltk
-from nltk.corpus import stopwords
 from datetime import datetime
 from fuzzywuzzy import fuzz
 
-# Ensure necessary NLP resources are installed
+# Ensure necessary NLP resources are installed (if used)
 nltk.download("stopwords")
-nltk.download("punkt")
 
 # ---------------------------
 # Helper Functions
@@ -67,27 +64,46 @@ def extract_job_description(url):
     paragraphs = [p.get_text() for p in soup.find_all("p") if len(p.get_text()) > 100]
     return " ".join(paragraphs) if paragraphs else None
 
+def extract_noun_phrases(text):
+    """
+    Extracts capitalized words and phrases (assumed to be noun phrases like job titles).
+    No external NLP models required.
+    """
+    words = text.split()
+    noun_phrases = []
+    temp_phrase = []
+
+    for word in words:
+        if word.istitle():  # Capitalized words likely indicate a title or important noun
+            temp_phrase.append(word)
+        else:
+            if temp_phrase:
+                noun_phrases.append(" ".join(temp_phrase))
+                temp_phrase = []
+    if temp_phrase:
+        noun_phrases.append(" ".join(temp_phrase))
+
+    return noun_phrases
+
 def extract_job_criteria(url):
     """
-    Extracts job title, experience, skills, and education using TextBlob & Regex.
+    Extracts job title, experience, skills, and education using simple text processing.
     """
     job_desc = extract_job_description(url)
     if not job_desc:
         return None
 
-    # Use TextBlob for NLP processing
-    blob = TextBlob(job_desc)
+    # Extract noun phrases (job titles, key terms)
+    noun_phrases = extract_noun_phrases(job_desc)
+    job_title = noun_phrases[0] if noun_phrases else "Not Found"
 
-    # Extract job title (First noun phrase)
-    job_title = blob.noun_phrases[0] if blob.noun_phrases else "Not Found"
-
-    # Extract required years of experience (Regex)
+    # Extract experience requirements (Regex)
     experience_match = re.search(r"(\d+)\+?\s*(?:years|yrs|YRS)", job_desc, re.IGNORECASE)
     required_experience = f"{experience_match.group(1)}+ years" if experience_match else "Not specified"
 
-    # Extract key skills (Matching against common skills list)
+    # Extract skills (Simple keyword matching)
     common_skills = ["Python", "SQL", "Java", "JavaScript", "Machine Learning", "Data Science", "Leadership"]
-    skills_found = set(word for word in blob.words if word in common_skills)
+    skills_found = set(word for word in job_desc.split() if word in common_skills)
 
     # Extract education requirements (Regex)
     education_match = re.search(r"(Bachelor's|Master's|PhD) in ([A-Za-z ]+)", job_desc, re.IGNORECASE)
@@ -173,25 +189,18 @@ def main():
         uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
         if uploaded_file:
             connections_df = extract_linkedin_connections(uploaded_file)
-            if connections_df is not None:
-                st.success("Connections uploaded and cleaned successfully!")
-                st.dataframe(connections_df.head())
-                st.session_state.connections_df = connections_df
+            st.session_state.connections_df = connections_df
 
     else:
         st.header("Find Candidates for a Job Posting")
         job_url = st.text_input("Paste Job Posting URL")
         if st.button("Extract Job Criteria"):
-            if job_url:
-                criteria = extract_job_criteria(job_url)
-                st.session_state.current_criteria = criteria
+            criteria = extract_job_criteria(job_url)
+            st.session_state.current_criteria = criteria
 
-        if "current_criteria" in st.session_state:
-            if st.button("Find Matching Candidates"):
-                if "connections_df" in st.session_state:
-                    connections_df = st.session_state.connections_df
-                    matching_candidates = match_candidates(connections_df, st.session_state.current_criteria)
-                    st.dataframe(matching_candidates)
+        if st.button("Find Matching Candidates"):
+            matching_candidates = match_candidates(st.session_state.connections_df, st.session_state.current_criteria)
+            st.dataframe(matching_candidates)
 
 if __name__ == "__main__":
     main()
