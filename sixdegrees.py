@@ -7,7 +7,7 @@ import nltk
 from datetime import datetime
 from fuzzywuzzy import fuzz
 
-# Ensure necessary NLP resources are installed (if used)
+# Ensure necessary NLP resources are installed
 nltk.download("stopwords")
 
 # ---------------------------
@@ -126,53 +126,6 @@ def extract_job_criteria(url):
         "industry": industry
     }
 
-def match_candidates(connections_df, criteria):
-    """
-    Matches candidates based on:
-      - Current role/title (using fuzzy matching)
-      - Industry
-      - Recency of experience (Max 5 years for senior, 2 years for junior)
-      - Skills and Education match
-    """
-    if connections_df is None or connections_df.empty:
-        return pd.DataFrame()
-
-    current_year = datetime.now().year
-
-    def score_candidate(row):
-        score = 0
-        last_active_year = row.get("Connected On", None)
-        if pd.isnull(last_active_year):
-            return 0  # Ignore if we don't have date data
-
-        last_active_year = last_active_year.year
-
-        # Experience filter based on seniority
-        if "Senior" in criteria["seniority"] and (current_year - last_active_year > 5):
-            return 0
-        if "Junior" in criteria["seniority"] and (current_year - last_active_year > 2):
-            return 0
-
-        # Job Title Fuzzy Match
-        title_similarity = fuzz.token_sort_ratio(criteria["job_title"], str(row.get("Position", "")))
-        if title_similarity > 60:
-            score += 50
-
-        # Industry match
-        if criteria["industry"].lower() in str(row.get("Company", "")).lower():
-            score += 25
-
-        # Education match
-        if criteria["education"].lower() in str(row.get("Company", "")).lower():
-            score += 15
-
-        return score
-    
-    connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
-    filtered_df = connections_df[connections_df["match_score"] > 0]
-    filtered_df = filtered_df.sort_values(by="match_score", ascending=False).head(5)
-    return filtered_df
-
 # ---------------------------
 # Streamlit Web Application
 # ---------------------------
@@ -189,18 +142,32 @@ def main():
         uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
         if uploaded_file:
             connections_df = extract_linkedin_connections(uploaded_file)
-            st.session_state.connections_df = connections_df
+            if connections_df is not None:
+                st.success("Connections uploaded and cleaned successfully!")
+                st.subheader("Example Connections:")
+                st.dataframe(connections_df.head(5))  # Show sample data
+                st.session_state.connections_df = connections_df
 
     else:
         st.header("Find Candidates for a Job Posting")
         job_url = st.text_input("Paste Job Posting URL")
         if st.button("Extract Job Criteria"):
-            criteria = extract_job_criteria(job_url)
-            st.session_state.current_criteria = criteria
+            if job_url:
+                criteria = extract_job_criteria(job_url)
+                st.session_state.current_criteria = criteria
 
-        if st.button("Find Matching Candidates"):
-            matching_candidates = match_candidates(st.session_state.connections_df, st.session_state.current_criteria)
-            st.dataframe(matching_candidates)
+        if "current_criteria" in st.session_state:
+            st.subheader("Review and Edit Job Criteria")
+            criteria = st.session_state.current_criteria
+
+            criteria["job_title"] = st.text_input("Job Title", value=criteria.get("job_title", ""))
+            criteria["required_experience"] = st.text_input("Required Experience", value=criteria.get("required_experience", ""))
+            criteria["education"] = st.text_input("Education Requirement", value=criteria.get("education", ""))
+            criteria["seniority"] = st.text_input("Seniority Level", value=criteria.get("seniority", ""))
+            criteria["industry"] = st.text_input("Industry", value=criteria.get("industry", ""))
+            skills = st.text_area("Skills (comma separated)", value=", ".join(criteria.get("skills", [])))
+            criteria["skills"] = [skill.strip() for skill in skills.split(",") if skill.strip()]
+            st.session_state.current_criteria = criteria
 
 if __name__ == "__main__":
     main()
