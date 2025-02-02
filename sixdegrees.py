@@ -15,24 +15,16 @@ nltk.download("stopwords")
 # ---------------------------
 
 def clean_csv_data(df):
-    """
-    Cleans LinkedIn connections CSV:
-      - Standardizes column names
-      - Trims whitespace from fields
-      - Converts dates properly
-      - Drops duplicates
-    """
+    """Cleans LinkedIn connections CSV."""
     expected_columns = ["First Name", "Last Name", "URL", "Email Address", "Company", "Position", "Connected On"]
-    df.columns = expected_columns  # Rename columns correctly
+    df.columns = expected_columns
     df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
     df["Connected On"] = pd.to_datetime(df["Connected On"], errors="coerce")
     df.drop_duplicates(inplace=True)
     return df
 
 def extract_linkedin_connections(csv_file):
-    """
-    Reads and cleans the LinkedIn connections CSV file uploaded by the employee.
-    """
+    """Reads and cleans LinkedIn connections CSV file uploaded by an employee."""
     try:
         df = pd.read_csv(csv_file, skiprows=3, encoding="utf-8")
         df = clean_csv_data(df)
@@ -42,9 +34,7 @@ def extract_linkedin_connections(csv_file):
         return None
 
 def extract_job_description(url):
-    """
-    Fetches the job description from a given job posting URL.
-    """
+    """Fetches the job description from a given job posting URL."""
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -65,16 +55,13 @@ def extract_job_description(url):
     return " ".join(paragraphs) if paragraphs else None
 
 def extract_noun_phrases(text):
-    """
-    Extracts capitalized words and phrases (assumed to be noun phrases like job titles).
-    No external NLP models required.
-    """
+    """Extracts capitalized words and phrases as job titles."""
     words = text.split()
     noun_phrases = []
     temp_phrase = []
 
     for word in words:
-        if word.istitle():  # Capitalized words likely indicate a title or important noun
+        if word.istitle():
             temp_phrase.append(word)
         else:
             if temp_phrase:
@@ -86,32 +73,25 @@ def extract_noun_phrases(text):
     return noun_phrases
 
 def extract_job_criteria(url):
-    """
-    Extracts job title, experience, skills, and education using simple text processing.
-    """
+    """Extracts job title, level, experience, and education using regex and simple text processing."""
     job_desc = extract_job_description(url)
     if not job_desc:
         return None
 
-    # Extract noun phrases (job titles, key terms)
     noun_phrases = extract_noun_phrases(job_desc)
     job_title = noun_phrases[0] if noun_phrases else "Not Found"
 
-    # Extract experience requirements (Regex)
-    experience_match = re.search(r"(\d+)\+?\s*(?:years|yrs|YRS)", job_desc, re.IGNORECASE)
+    # Extract seniority level
+    seniority_levels = ["Intern", "Junior", "Mid-Level", "Senior", "Lead", "Manager", "Director", "VP", "Executive"]
+    seniority = next((level for level in seniority_levels if level.lower() in job_desc.lower()), "Not specified")
+
+    # Extract years of experience
+    experience_match = re.search(r"(\d+)\+?\s*(?:years|yrs|YRS|experience)", job_desc, re.IGNORECASE)
     required_experience = f"{experience_match.group(1)}+ years" if experience_match else "Not specified"
 
-    # Extract skills (Simple keyword matching)
-    common_skills = ["Python", "SQL", "Java", "JavaScript", "Machine Learning", "Data Science", "Leadership"]
-    skills_found = set(word for word in job_desc.split() if word in common_skills)
-
-    # Extract education requirements (Regex)
+    # Extract education
     education_match = re.search(r"(Bachelor's|Master's|PhD) in ([A-Za-z ]+)", job_desc, re.IGNORECASE)
     education = f"{education_match.group(1)} in {education_match.group(2)}" if education_match else "Not specified"
-
-    # Extract industry
-    industry_keywords = ["Technology", "Finance", "Healthcare", "Education", "Retail", "Marketing"]
-    industry = next((word for word in industry_keywords if word.lower() in job_desc.lower()), "Not specified")
 
     # Extract company name from URL
     company_match = re.search(r"www\.([a-zA-Z0-9-]+)\.com", url)
@@ -119,33 +99,33 @@ def extract_job_criteria(url):
 
     return {
         "job_title": job_title,
+        "seniority": seniority,
         "required_experience": required_experience,
-        "skills": list(skills_found),
         "education": education,
-        "industry": industry,
         "company": company_name
     }
 
 def match_candidates(connections_df, criteria):
-    """
-    Matches candidates based on job criteria and excludes candidates working at the company.
-    """
+    """Matches candidates based on job criteria and excludes candidates working at the job's company."""
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
 
     def score_candidate(row):
         score = 0
-        # Exclude candidates working at the company of the job posting
         if row.get("Company", "").lower() == criteria["company"].lower():
-            return 0
+            return 0  # Exclude candidates who work at the company
 
         # Title match
         if criteria["job_title"].lower() in str(row.get("Position", "")).lower():
             score += 50
 
-        # Industry match
-        if criteria["industry"].lower() in str(row.get("Company", "")).lower():
+        # Seniority match
+        if criteria["seniority"].lower() in str(row.get("Position", "")).lower():
             score += 20
+
+        # Experience match
+        if criteria["required_experience"].lower() in str(row.get("Position", "")).lower():
+            score += 15
 
         # Education match
         if criteria["education"].lower() in str(row.get("Company", "")).lower():
@@ -174,7 +154,7 @@ def main():
         if uploaded_file:
             connections_df = extract_linkedin_connections(uploaded_file)
             if connections_df is not None:
-                st.success("Connections uploaded and cleaned successfully!")
+                st.success("Connections uploaded successfully!")
                 st.subheader("Example Connections:")
                 st.dataframe(connections_df.head(5))
                 st.session_state.connections_df = connections_df
