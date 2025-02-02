@@ -126,6 +126,33 @@ def extract_job_criteria(url):
         "industry": industry
     }
 
+def match_candidates(connections_df, criteria):
+    """
+    Matches candidates based on job criteria.
+    """
+    if connections_df is None or connections_df.empty:
+        return pd.DataFrame()
+
+    def score_candidate(row):
+        score = 0
+        # Title match
+        if criteria["job_title"].lower() in str(row.get("Position", "")).lower():
+            score += 50
+
+        # Industry match
+        if criteria["industry"].lower() in str(row.get("Company", "")).lower():
+            score += 20
+
+        # Education match
+        if criteria["education"].lower() in str(row.get("Company", "")).lower():
+            score += 10
+
+        return score
+    
+    connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
+    filtered_df = connections_df[connections_df["match_score"] > 0]
+    return filtered_df.sort_values(by="match_score", ascending=False).head(5)
+
 # ---------------------------
 # Streamlit Web Application
 # ---------------------------
@@ -156,18 +183,18 @@ def main():
                 criteria = extract_job_criteria(job_url)
                 st.session_state.current_criteria = criteria
 
-        if "current_criteria" in st.session_state:
-            st.subheader("Review and Edit Job Criteria")
-            criteria = st.session_state.current_criteria
-
-            criteria["job_title"] = st.text_input("Job Title", value=criteria.get("job_title", ""))
-            criteria["required_experience"] = st.text_input("Required Experience", value=criteria.get("required_experience", ""))
-            criteria["education"] = st.text_input("Education Requirement", value=criteria.get("education", ""))
-            criteria["seniority"] = st.text_input("Seniority Level", value=criteria.get("seniority", ""))
-            criteria["industry"] = st.text_input("Industry", value=criteria.get("industry", ""))
-            skills = st.text_area("Skills (comma separated)", value=", ".join(criteria.get("skills", [])))
-            criteria["skills"] = [skill.strip() for skill in skills.split(",") if skill.strip()]
-            st.session_state.current_criteria = criteria
+        if st.button("Find Matching Candidates"):
+            if "current_criteria" in st.session_state and "connections_df" in st.session_state:
+                matching_candidates = match_candidates(st.session_state.connections_df, st.session_state.current_criteria)
+                if not matching_candidates.empty:
+                    st.subheader("Top 5 Matching Candidates")
+                    for _, row in matching_candidates.iterrows():
+                        st.markdown(f"### {row['First Name']} {row['Last Name']}")
+                        st.write(f"**Position:** {row['Position']}")
+                        st.write(f"**Company:** {row['Company']}")
+                        st.write(f"**Match Score:** {row['match_score']}")
+                else:
+                    st.error("No matching candidates found.")
 
 if __name__ == "__main__":
     main()
