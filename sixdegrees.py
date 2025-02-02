@@ -113,28 +113,32 @@ def extract_job_criteria(url):
     industry_keywords = ["Technology", "Finance", "Healthcare", "Education", "Retail", "Marketing"]
     industry = next((word for word in industry_keywords if word.lower() in job_desc.lower()), "Not specified")
 
-    # Extract seniority level
-    seniority_levels = ["Entry-level", "Mid-level", "Senior", "Manager", "Director", "Executive"]
-    seniority = next((level for level in seniority_levels if level.lower() in job_desc.lower()), "Not specified")
+    # Extract company name from URL
+    company_match = re.search(r"www\.([a-zA-Z0-9-]+)\.com", url)
+    company_name = company_match.group(1) if company_match else "Unknown"
 
     return {
         "job_title": job_title,
         "required_experience": required_experience,
         "skills": list(skills_found),
         "education": education,
-        "seniority": seniority,
-        "industry": industry
+        "industry": industry,
+        "company": company_name
     }
 
 def match_candidates(connections_df, criteria):
     """
-    Matches candidates based on job criteria.
+    Matches candidates based on job criteria and excludes candidates working at the company.
     """
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
 
     def score_candidate(row):
         score = 0
+        # Exclude candidates working at the company of the job posting
+        if row.get("Company", "").lower() == criteria["company"].lower():
+            return 0
+
         # Title match
         if criteria["job_title"].lower() in str(row.get("Position", "")).lower():
             score += 50
@@ -172,7 +176,7 @@ def main():
             if connections_df is not None:
                 st.success("Connections uploaded and cleaned successfully!")
                 st.subheader("Example Connections:")
-                st.dataframe(connections_df.head(5))  # Show sample data
+                st.dataframe(connections_df.head(5))
                 st.session_state.connections_df = connections_df
 
     else:
@@ -183,18 +187,18 @@ def main():
                 criteria = extract_job_criteria(job_url)
                 st.session_state.current_criteria = criteria
 
-        if st.button("Find Matching Candidates"):
-            if "current_criteria" in st.session_state and "connections_df" in st.session_state:
-                matching_candidates = match_candidates(st.session_state.connections_df, st.session_state.current_criteria)
-                if not matching_candidates.empty:
-                    st.subheader("Top 5 Matching Candidates")
-                    for _, row in matching_candidates.iterrows():
-                        st.markdown(f"### {row['First Name']} {row['Last Name']}")
-                        st.write(f"**Position:** {row['Position']}")
-                        st.write(f"**Company:** {row['Company']}")
-                        st.write(f"**Match Score:** {row['match_score']}")
-                else:
-                    st.error("No matching candidates found.")
+        if "current_criteria" in st.session_state:
+            st.subheader("Review and Edit Job Criteria")
+            criteria = st.session_state.current_criteria
+
+            for key, value in criteria.items():
+                criteria[key] = st.text_input(key.replace("_", " ").title(), value=value)
+
+            st.session_state.current_criteria = criteria
+
+        if st.button("Find Matching Candidates") and "connections_df" in st.session_state:
+            matching_candidates = match_candidates(st.session_state.connections_df, st.session_state.current_criteria)
+            st.dataframe(matching_candidates)
 
 if __name__ == "__main__":
     main()
