@@ -93,16 +93,11 @@ def extract_job_criteria(url):
     education_match = re.search(r"(Bachelor's|Master's|PhD) in ([A-Za-z ]+)", job_desc, re.IGNORECASE)
     education = f"{education_match.group(1)} in {education_match.group(2)}" if education_match else "Not specified"
 
-    # Extract company name from URL
-    company_match = re.search(r"www\.([a-zA-Z0-9-]+)\.com", url)
-    company_name = company_match.group(1) if company_match else "Unknown"
-
     return {
         "job_title": job_title,
         "seniority": seniority,
         "required_experience": required_experience,
-        "education": education,
-        "company": company_name
+        "education": education
     }
 
 def match_candidates(connections_df, criteria):
@@ -112,9 +107,6 @@ def match_candidates(connections_df, criteria):
 
     def score_candidate(row):
         score = 0
-        if row.get("Company", "").lower() == criteria["company"].lower():
-            return 0  # Exclude candidates who work at the company
-
         # Title match
         if criteria["job_title"].lower() in str(row.get("Position", "")).lower():
             score += 50
@@ -178,7 +170,17 @@ def main():
 
         if st.button("Find Matching Candidates") and "connections_df" in st.session_state:
             matching_candidates = match_candidates(st.session_state.connections_df, st.session_state.current_criteria)
-            st.dataframe(matching_candidates)
+            if not matching_candidates.empty:
+                st.subheader("Top 5 Matching Candidates")
+                for _, row in matching_candidates.iterrows():
+                    st.markdown(f"### {row['First Name']} {row['Last Name']}")
+                    st.write(f"**Position:** {row['Position']}")
+                    st.write(f"**Company:** {row['Company']}")
+                    st.write(f"**Match Score:** {row['match_score']}")
+                    st.write(f"**Why they are a good fit:** Matches job title, experience, and education criteria.")
+            else:
+                st.error("No matching candidates found.")
 
 if __name__ == "__main__":
     main()
+
