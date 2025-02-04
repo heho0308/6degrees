@@ -101,25 +101,26 @@ def extract_job_criteria(url):
     }
 
 def match_candidates(connections_df, criteria):
-    """Matches candidates based on job criteria and excludes candidates working at the job's company."""
+    """Matches candidates based on job criteria with a weighted scoring system and highlights fit."""
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
 
     def score_candidate(row):
         score = 0
-        # Title match
-        if criteria["job_title"].lower() in str(row.get("Position", "")).lower():
-            score += 50
 
-        # Seniority match
+        # Title match (Higher weight)
+        if criteria["job_title"].lower() in str(row.get("Position", "")).lower():
+            score += 60
+
+        # Seniority match (Moderate weight)
         if criteria["seniority"].lower() in str(row.get("Position", "")).lower():
             score += 20
 
-        # Experience match
+        # Experience match (Moderate weight)
         if criteria["required_experience"].lower() in str(row.get("Position", "")).lower():
-            score += 15
+            score += 10
 
-        # Education match
+        # Education match (Lower weight)
         if criteria["education"].lower() in str(row.get("Company", "")).lower():
             score += 10
 
@@ -173,14 +174,14 @@ def main():
             if not matching_candidates.empty:
                 st.subheader("Top 5 Matching Candidates")
                 for _, row in matching_candidates.iterrows():
-                    st.markdown(f"### {row['First Name']} {row['Last Name']}")
+                    score_color = "🟢" if row['match_score'] >= 70 else "🟠" if row['match_score'] >= 50 else "🔴"
+                    st.markdown(f"### {row['First Name']} {row['Last Name']} {score_color}")
                     st.write(f"**Position:** {row['Position']}")
                     st.write(f"**Company:** {row['Company']}")
                     st.write(f"**Match Score:** {row['match_score']}")
-                    st.write(f"**Why they are a good fit:** Matches job title, experience, and education criteria.")
+                    st.markdown(f"**[LinkedIn Profile]({row['URL']})**")
             else:
                 st.error("No matching candidates found.")
 
 if __name__ == "__main__":
     main()
-
