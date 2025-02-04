@@ -54,6 +54,47 @@ def extract_job_description(url):
     paragraphs = [p.get_text() for p in soup.find_all("p") if len(p.get_text()) > 100]
     return " ".join(paragraphs) if paragraphs else None
 
+def extract_noun_phrases(text):
+    """Extracts capitalized words and phrases as job titles."""
+    words = text.split()
+    noun_phrases = []
+    temp_phrase = []
+
+    for word in words:
+        if word.istitle():
+            temp_phrase.append(word)
+        else:
+            if temp_phrase:
+                noun_phrases.append(" ".join(temp_phrase))
+                temp_phrase = []
+    if temp_phrase:
+        noun_phrases.append(" ".join(temp_phrase))
+
+    return noun_phrases
+
+def extract_job_criteria(url):
+    """Extracts job title, level, and required experience using regex and simple text processing."""
+    job_desc = extract_job_description(url)
+    if not job_desc:
+        return None
+
+    noun_phrases = extract_noun_phrases(job_desc)
+    job_title = noun_phrases[0] if noun_phrases else "Not Found"
+
+    # Extract seniority level
+    seniority_levels = ["Intern", "Junior", "Mid-Level", "Senior", "Lead", "Manager", "Director", "VP", "Executive"]
+    seniority = next((level for level in seniority_levels if level.lower() in job_desc.lower()), "Not specified")
+
+    # Extract years of experience
+    experience_match = re.search(r"(\d+)\+?\s*(?:years|yrs|YRS|experience)", job_desc, re.IGNORECASE)
+    required_experience = f"{experience_match.group(1)}+ years" if experience_match else "Not specified"
+
+    return {
+        "job_title": job_title,
+        "seniority": seniority,
+        "required_experience": required_experience
+    }
+
 def match_candidates(connections_df, criteria):
     """Matches candidates based on job criteria."""
     if connections_df is None or connections_df.empty:
@@ -112,9 +153,13 @@ def main():
 
         if st.button("Extract Job Criteria"):
             if job_url:
-                criteria = extract_job_description(job_url)
-                if criteria:
-                    search_key = f"{criteria['job_title']} ({criteria['seniority']})"
+                criteria = extract_job_criteria(job_url)
+                
+                # Fix: Ensure criteria is valid before using it
+                if criteria is None:
+                    st.error("Failed to extract job criteria. Please check the job posting URL.")
+                else:
+                    search_key = f"{criteria.get('job_title', 'Unknown Title')} ({criteria.get('seniority', 'Unknown Seniority')})"
                     st.session_state.previous_searches[search_key] = criteria
                     st.session_state.current_criteria = criteria
 
@@ -135,30 +180,7 @@ def main():
 
         if st.button("Find Matching Candidates") and "connections_df" in st.session_state:
             matching_candidates = match_candidates(st.session_state.connections_df, st.session_state.current_criteria)
-
-            if not matching_candidates.empty:
-                st.subheader("Top 5 Matching Candidates (Best to Worst)")
-
-                for _, row in matching_candidates.iterrows():
-                    # Assign Traffic Light Color
-                    score = row["match_score"]
-                    if score >= 70:
-                        color = "🟢 Strong Fit"
-                    elif score >= 50:
-                        color = "🟠 Medium Fit"
-                    else:
-                        color = "🔴 Weak Fit"
-
-                    # Display Candidate Details
-                    st.markdown(f"### {row['First Name']} {row['Last Name']} - {color}")
-                    st.write(f"**Current Job:** {row['Position']}")
-                    st.write(f"**Company:** {row['Company']}")
-                    st.write(f"**Match Score:** {score}")
-                    st.markdown(f"🔗 [LinkedIn Profile]({row['URL']})", unsafe_allow_html=True)
-                    st.markdown("---")
-
-            else:
-                st.error("No matching candidates found.")
+            st.dataframe(matching_candidates)
 
 if __name__ == "__main__":
     main()
