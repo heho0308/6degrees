@@ -141,6 +141,9 @@ def main():
     username = st.sidebar.text_input("Enter your username", value="user1")
     st.sidebar.write(f"Logged in as: **{username}** ({role})")
 
+    if "previous_searches" not in st.session_state:
+        st.session_state.previous_searches = {}
+
     if role == "Employee":
         st.header("Upload Your LinkedIn Connections")
         uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
@@ -158,7 +161,14 @@ def main():
         if st.button("Extract Job Criteria"):
             if job_url:
                 criteria = extract_job_criteria(job_url)
+                st.session_state.previous_searches[job_url] = criteria
                 st.session_state.current_criteria = criteria
+
+        st.sidebar.subheader("Previous Searches")
+        selected_search = st.sidebar.selectbox("Select a past search:", list(st.session_state.previous_searches.keys()), index=len(st.session_state.previous_searches)-1 if st.session_state.previous_searches else None)
+
+        if selected_search:
+            st.session_state.current_criteria = st.session_state.previous_searches[selected_search]
 
         if "current_criteria" in st.session_state:
             st.subheader("Review and Edit Job Criteria")
@@ -171,17 +181,7 @@ def main():
 
         if st.button("Find Matching Candidates") and "connections_df" in st.session_state:
             matching_candidates = match_candidates(st.session_state.connections_df, st.session_state.current_criteria)
-            if not matching_candidates.empty:
-                st.subheader("Top 5 Matching Candidates")
-                for _, row in matching_candidates.iterrows():
-                    score_color = "🟢" if row['match_score'] >= 70 else "🟠" if row['match_score'] >= 50 else "🔴"
-                    st.markdown(f"### {row['First Name']} {row['Last Name']} {score_color}")
-                    st.write(f"**Position:** {row['Position']}")
-                    st.write(f"**Company:** {row['Company']}")
-                    st.write(f"**Match Score:** {row['match_score']}")
-                    st.markdown(f"**[LinkedIn Profile]({row['URL']})**")
-            else:
-                st.error("No matching candidates found.")
+            st.dataframe(matching_candidates)
 
 if __name__ == "__main__":
     main()
