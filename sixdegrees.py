@@ -93,42 +93,34 @@ def extract_job_criteria(url):
     education_match = re.search(r"(Bachelor's|Master's|PhD) in ([A-Za-z ]+)", job_desc, re.IGNORECASE)
     education = f"{education_match.group(1)} in {education_match.group(2)}" if education_match else "Not specified"
 
-    # Extract company name
-    company_match = re.search(r"at ([A-Za-z0-9 &]+)", job_desc)
-    company_name = company_match.group(1) if company_match else "Unknown"
-
     return {
         "job_title": job_title,
         "seniority": seniority,
         "required_experience": required_experience,
-        "education": education,
-        "company": company_name
+        "education": education
     }
 
 def match_candidates(connections_df, criteria):
-    """Matches candidates based on job criteria."""
+    """Matches candidates based on job criteria with a weighted scoring system and highlights fit."""
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
 
     def score_candidate(row):
         score = 0
-        # Exclude candidates currently at the company
-        if row.get("Company", "").lower() == criteria["company"].lower():
-            return 0
 
-        # Title match
+        # Title match (Higher weight)
         if criteria["job_title"].lower() in str(row.get("Position", "")).lower():
-            score += 50
+            score += 60
 
-        # Seniority match
+        # Seniority match (Moderate weight)
         if criteria["seniority"].lower() in str(row.get("Position", "")).lower():
             score += 20
 
-        # Experience match
+        # Experience match (Moderate weight)
         if criteria["required_experience"].lower() in str(row.get("Position", "")).lower():
-            score += 15
+            score += 10
 
-        # Education match
+        # Education match (Lower weight)
         if criteria["education"].lower() in str(row.get("Company", "")).lower():
             score += 10
 
@@ -149,9 +141,6 @@ def main():
     username = st.sidebar.text_input("Enter your username", value="user1")
     st.sidebar.write(f"Logged in as: **{username}** ({role})")
 
-    if "previous_searches" not in st.session_state:
-        st.session_state.previous_searches = {}
-
     if role == "Employee":
         st.header("Upload Your LinkedIn Connections")
         uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
@@ -166,20 +155,10 @@ def main():
     else:
         st.header("Find Candidates for a Job Posting")
         job_url = st.text_input("Paste Job Posting URL")
-
         if st.button("Extract Job Criteria"):
             if job_url:
                 criteria = extract_job_criteria(job_url)
-                if criteria:
-                    search_key = f"{criteria['job_title']} at {criteria['company']}"
-                    st.session_state.previous_searches[search_key] = criteria
-                    st.session_state.current_criteria = criteria
-
-        st.sidebar.subheader("Previous Searches")
-        selected_search = st.sidebar.selectbox("Select a past search:", list(st.session_state.previous_searches.keys()), index=len(st.session_state.previous_searches)-1 if st.session_state.previous_searches else None)
-
-        if selected_search:
-            st.session_state.current_criteria = st.session_state.previous_searches[selected_search]
+                st.session_state.current_criteria = criteria
 
         if "current_criteria" in st.session_state:
             st.subheader("Review and Edit Job Criteria")
@@ -192,7 +171,17 @@ def main():
 
         if st.button("Find Matching Candidates") and "connections_df" in st.session_state:
             matching_candidates = match_candidates(st.session_state.connections_df, st.session_state.current_criteria)
-            st.dataframe(matching_candidates)
+            if not matching_candidates.empty:
+                st.subheader("Top 5 Matching Candidates")
+                for _, row in matching_candidates.iterrows():
+                    score_color = "🟢" if row['match_score'] >= 70 else "🟠" if row['match_score'] >= 50 else "🔴"
+                    st.markdown(f"### {row['First Name']} {row['Last Name']} {score_color}")
+                    st.write(f"**Position:** {row['Position']}")
+                    st.write(f"**Company:** {row['Company']}")
+                    st.write(f"**Match Score:** {row['match_score']}")
+                    st.markdown(f"**[LinkedIn Profile]({row['URL']})**")
+            else:
+                st.error("No matching candidates found.")
 
 if __name__ == "__main__":
     main()
