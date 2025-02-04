@@ -93,20 +93,29 @@ def extract_job_criteria(url):
     education_match = re.search(r"(Bachelor's|Master's|PhD) in ([A-Za-z ]+)", job_desc, re.IGNORECASE)
     education = f"{education_match.group(1)} in {education_match.group(2)}" if education_match else "Not specified"
 
+    # Extract company name
+    company_match = re.search(r"at ([A-Za-z0-9 &]+)", job_desc)
+    company_name = company_match.group(1) if company_match else "Unknown"
+
     return {
         "job_title": job_title,
         "seniority": seniority,
         "required_experience": required_experience,
-        "education": education
+        "education": education,
+        "company": company_name
     }
 
 def match_candidates(connections_df, criteria):
-    """Matches candidates based on job criteria and excludes candidates working at the job's company."""
+    """Matches candidates based on job criteria."""
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
 
     def score_candidate(row):
         score = 0
+        # Exclude candidates currently at the company
+        if row.get("Company", "").lower() == criteria["company"].lower():
+            return 0
+
         # Title match
         if criteria["job_title"].lower() in str(row.get("Position", "")).lower():
             score += 50
@@ -157,11 +166,14 @@ def main():
     else:
         st.header("Find Candidates for a Job Posting")
         job_url = st.text_input("Paste Job Posting URL")
+
         if st.button("Extract Job Criteria"):
             if job_url:
                 criteria = extract_job_criteria(job_url)
-                st.session_state.previous_searches[job_url] = criteria
-                st.session_state.current_criteria = criteria
+                if criteria:
+                    search_key = f"{criteria['job_title']} at {criteria['company']}"
+                    st.session_state.previous_searches[search_key] = criteria
+                    st.session_state.current_criteria = criteria
 
         st.sidebar.subheader("Previous Searches")
         selected_search = st.sidebar.selectbox("Select a past search:", list(st.session_state.previous_searches.keys()), index=len(st.session_state.previous_searches)-1 if st.session_state.previous_searches else None)
