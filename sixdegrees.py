@@ -101,26 +101,25 @@ def extract_job_criteria(url):
     }
 
 def match_candidates(connections_df, criteria):
-    """Matches candidates based on job criteria with a weighted scoring system and highlights fit."""
+    """Matches candidates based on job criteria and excludes candidates working at the job's company."""
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
 
     def score_candidate(row):
         score = 0
-
-        # Title match (Higher weight)
+        # Title match
         if criteria["job_title"].lower() in str(row.get("Position", "")).lower():
-            score += 60
+            score += 50
 
-        # Seniority match (Moderate weight)
+        # Seniority match
         if criteria["seniority"].lower() in str(row.get("Position", "")).lower():
             score += 20
 
-        # Experience match (Moderate weight)
+        # Experience match
         if criteria["required_experience"].lower() in str(row.get("Position", "")).lower():
-            score += 10
+            score += 15
 
-        # Education match (Lower weight)
+        # Education match
         if criteria["education"].lower() in str(row.get("Company", "")).lower():
             score += 10
 
