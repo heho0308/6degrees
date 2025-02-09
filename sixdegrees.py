@@ -116,12 +116,26 @@ def main():
 
         if st.button("Extract Job Criteria"):
             if job_url:
-                criteria = extract_job_description(job_url)
-                if criteria:
-                    criteria["company"] = "CompanyName"  # Ensure company name is extracted or added manually for exclusion
-                    search_key = f"{criteria['job_title']} ({criteria['seniority']})"
-                    st.session_state.previous_searches[search_key] = criteria
-                    st.session_state.current_criteria = criteria
+                job_description = extract_job_description(job_url)
+
+                # Fix: Ensure job_description is processed into a valid criteria dictionary
+                if isinstance(job_description, str):
+                    # Default criteria dictionary
+                    criteria = {
+                        "job_title": "Unknown Title",
+                        "seniority": "Unknown Seniority",
+                        "required_experience": "Not specified",
+                        "company": "CompanyName"  # Default placeholder for company
+                    }
+                else:
+                    criteria = job_description  # If preprocessed as a dictionary
+
+                # Ensure "company" key exists
+                criteria["company"] = criteria.get("company", "CompanyName")
+
+                search_key = f"{criteria['job_title']} ({criteria['seniority']})"
+                st.session_state.previous_searches[search_key] = criteria
+                st.session_state.current_criteria = criteria
 
         st.sidebar.subheader("Previous Searches")
         selected_search = st.sidebar.selectbox("Select a past search:", list(st.session_state.previous_searches.keys()), index=len(st.session_state.previous_searches)-1 if st.session_state.previous_searches else None)
