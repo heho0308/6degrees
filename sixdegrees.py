@@ -14,17 +14,31 @@ nltk.download("stopwords")
 # ---------------------------
 
 def clean_csv_data(df):
-    """Cleans LinkedIn connections CSV."""
+    """Cleans and standardizes LinkedIn connections CSV, ensuring consistent column structure."""
     expected_columns = ["First Name", "Last Name", "URL", "Email Address", "Company", "Position", "Location", "Connected On"]
+
+    current_columns = df.columns.tolist()
+
+    # Handle column length mismatch
+    if len(current_columns) > len(expected_columns):
+        df = df.iloc[:, :len(expected_columns)]  # Truncate extra columns
+    elif len(current_columns) < len(expected_columns):
+        for i in range(len(current_columns), len(expected_columns)):
+            df[f"Extra_Column_{i}"] = None  # Add missing columns with default values
+
+    # Rename columns to match the expected structure
     df.columns = expected_columns
+
+    # Clean and standardize data
     df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
     df["Connected On"] = pd.to_datetime(df["Connected On"], errors="coerce")
-    df["Company"] = df["Company"].astype(str).fillna("")  # Convert NaN to empty strings
+    df["Company"] = df["Company"].astype(str).fillna("")
+    df["Location"] = df["Location"].astype(str).fillna("Unknown Location")
     df.drop_duplicates(inplace=True)
     return df
 
 def extract_linkedin_connections(csv_file):
-    """Reads and cleans LinkedIn connections CSV file uploaded by an employee."""
+    """Reads and cleans the LinkedIn connections CSV file uploaded by an employee."""
     try:
         df = pd.read_csv(csv_file, skiprows=3, encoding="utf-8")
         df = clean_csv_data(df)
@@ -83,7 +97,7 @@ def match_candidates(connections_df, criteria):
 
     def score_candidate(row):
         score = 0
-        company = str(row.get("Company", "")).lower()  # Convert to string to prevent errors
+        company = str(row.get("Company", "")).lower()
         location = str(row.get("Location", "")).lower()
 
         # Exclude candidates working at the job's company
