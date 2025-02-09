@@ -15,7 +15,7 @@ nltk.download("stopwords")
 
 def clean_csv_data(df):
     """Cleans LinkedIn connections CSV."""
-    expected_columns = ["First Name", "Last Name", "URL", "Email Address", "Company", "Position", "Connected On"]
+    expected_columns = ["First Name", "Last Name", "URL", "Email Address", "Company", "Position", "Location", "Connected On"]
     df.columns = expected_columns
     df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
     df["Connected On"] = pd.to_datetime(df["Connected On"], errors="coerce")
@@ -34,7 +34,7 @@ def extract_linkedin_connections(csv_file):
         return None
 
 def extract_job_description(url):
-    """Fetches the job description from a given job posting URL."""
+    """Fetches the job description from a given job posting URL and extracts criteria."""
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -49,10 +49,32 @@ def extract_job_description(url):
     for tag in job_desc_tags:
         job_section = soup.find(class_=tag) or soup.find(id=tag)
         if job_section:
-            return job_section.get_text(separator=" ", strip=True)
+            text = job_section.get_text(separator=" ", strip=True)
+            return extract_job_criteria(text)
 
     paragraphs = [p.get_text() for p in soup.find_all("p") if len(p.get_text()) > 100]
-    return " ".join(paragraphs) if paragraphs else None
+    return extract_job_criteria(" ".join(paragraphs)) if paragraphs else None
+
+def extract_job_criteria(text):
+    """Extracts job title, seniority, required experience, and location from the job description text."""
+    noun_phrases = re.findall(r"\b[A-Z][a-z]*\s[A-Z][a-z]*\b", text)
+    job_title = noun_phrases[0] if noun_phrases else "Unknown Title"
+
+    seniority_levels = ["Intern", "Junior", "Mid-Level", "Senior", "Lead", "Manager", "Director", "VP", "Executive"]
+    seniority = next((level for level in seniority_levels if level.lower() in text.lower()), "Unknown Seniority")
+
+    experience_match = re.search(r"(\d+)\+?\s*(?:years|yrs|experience)", text, re.IGNORECASE)
+    required_experience = f"{experience_match.group(1)}+ years" if experience_match else "Not specified"
+
+    location_match = re.search(r"\b(Location|Based in):\s*([A-Za-z, ]+)", text, re.IGNORECASE)
+    location = location_match.group(2).strip() if location_match else "Unknown Location"
+
+    return {
+        "job_title": job_title,
+        "seniority": seniority,
+        "required_experience": required_experience,
+        "location": location
+    }
 
 def match_candidates(connections_df, criteria):
     """Matches candidates based on job criteria and excludes candidates working at the job's company."""
@@ -62,8 +84,9 @@ def match_candidates(connections_df, criteria):
     def score_candidate(row):
         score = 0
         company = str(row.get("Company", "")).lower()  # Convert to string to prevent errors
+        location = str(row.get("Location", "")).lower()
 
-        # Exclude candidates working at the company issuing the job posting
+        # Exclude candidates working at the job's company
         if "company" in criteria and company == criteria["company"].lower():
             return 0
 
@@ -75,8 +98,8 @@ def match_candidates(connections_df, criteria):
         if criteria["seniority"].lower() in str(row.get("Position", "")).lower():
             score += 20
 
-        # Experience match
-        if criteria["required_experience"].lower() in str(row.get("Position", "")).lower():
+        # Location match
+        if criteria["location"].lower() in location:
             score += 15
 
         return score
@@ -116,26 +139,11 @@ def main():
 
         if st.button("Extract Job Criteria"):
             if job_url:
-                job_description = extract_job_description(job_url)
-
-                # Fix: Ensure job_description is processed into a valid criteria dictionary
-                if isinstance(job_description, str):
-                    # Default criteria dictionary
-                    criteria = {
-                        "job_title": "Unknown Title",
-                        "seniority": "Unknown Seniority",
-                        "required_experience": "Not specified",
-                        "company": "CompanyName"  # Default placeholder for company
-                    }
-                else:
-                    criteria = job_description  # If preprocessed as a dictionary
-
-                # Ensure "company" key exists
-                criteria["company"] = criteria.get("company", "CompanyName")
-
-                search_key = f"{criteria['job_title']} ({criteria['seniority']})"
-                st.session_state.previous_searches[search_key] = criteria
-                st.session_state.current_criteria = criteria
+                criteria = extract_job_description(job_url)
+                if criteria:
+                    search_key = f"{criteria['job_title']} ({criteria['seniority']})"
+                    st.session_state.previous_searches[search_key] = criteria
+                    st.session_state.current_criteria = criteria
 
         st.sidebar.subheader("Previous Searches")
         selected_search = st.sidebar.selectbox("Select a past search:", list(st.session_state.previous_searches.keys()), index=len(st.session_state.previous_searches)-1 if st.session_state.previous_searches else None)
@@ -147,7 +155,7 @@ def main():
             st.subheader("Review and Edit Job Criteria")
             criteria = st.session_state.current_criteria
 
-            for key in ["job_title", "required_experience", "seniority"]:
+            for key in ["job_title", "required_experience", "seniority", "location"]:
                 criteria[key] = st.text_input(key.replace("_", " ").title(), value=criteria.get(key, ""))
 
             st.session_state.current_criteria = criteria
@@ -159,19 +167,13 @@ def main():
                 st.subheader("Top 5 Matching Candidates (Best to Worst)")
 
                 for _, row in matching_candidates.iterrows():
-                    # Assign Traffic Light Color
                     score = row["match_score"]
-                    if score >= 70:
-                        color = "🟢 Strong Fit"
-                    elif score >= 50:
-                        color = "🟠 Medium Fit"
-                    else:
-                        color = "🔴 Weak Fit"
+                    color = "🟢 Strong Fit" if score >= 70 else "🟠 Medium Fit" if score >= 50 else "🔴 Weak Fit"
 
-                    # Display Candidate Details
                     st.markdown(f"### {row['First Name']} {row['Last Name']} - {color}")
                     st.write(f"**Current Job:** {row['Position']}")
                     st.write(f"**Company:** {row['Company']}")
+                    st.write(f"**Location:** {row['Location']}")
                     st.write(f"**Match Score:** {score}")
                     st.markdown(f"🔗 [LinkedIn Profile]({row['URL']})", unsafe_allow_html=True)
                     st.markdown("---")
