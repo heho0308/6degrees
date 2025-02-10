@@ -70,7 +70,7 @@ def extract_job_description(url):
     return extract_job_criteria(" ".join(paragraphs)) if paragraphs else None
 
 def extract_job_criteria(text):
-    """Extracts job title, seniority, required experience, and location from the job description text."""
+    """Extracts job title, seniority, required experience, location, and company name from the job description text."""
     noun_phrases = re.findall(r"\b[A-Z][a-z]*\s[A-Z][a-z]*\b", text)
     job_title = noun_phrases[0] if noun_phrases else "Unknown Title"
 
@@ -83,11 +83,15 @@ def extract_job_criteria(text):
     location_match = re.search(r"\b(Location|Based in):\s*([A-Za-z, ]+)", text, re.IGNORECASE)
     location = location_match.group(2).strip() if location_match else "Unknown Location"
 
+    company_match = re.search(r"\bCompany:\s*([A-Za-z0-9& ]+)", text, re.IGNORECASE)
+    company = company_match.group(1).strip() if company_match else "Unknown Company"
+
     return {
         "job_title": job_title,
         "seniority": seniority,
         "required_experience": required_experience,
-        "location": location
+        "location": location,
+        "company": company
     }
 
 def match_candidates(connections_df, criteria):
@@ -100,8 +104,8 @@ def match_candidates(connections_df, criteria):
         company = str(row.get("Company", "")).lower()
         location = str(row.get("Location", "")).lower()
 
-        # Exclude candidates working at the job's company
-        if "company" in criteria and company == criteria["company"].lower():
+        # Exclude candidates working at the job's company using fuzzy matching
+        if fuzz.partial_ratio(company, criteria["company"].lower()) > 80:
             return 0
 
         # Title match
@@ -120,6 +124,10 @@ def match_candidates(connections_df, criteria):
     
     connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
     filtered_df = connections_df[connections_df["match_score"] > 0]
+    
+    if filtered_df.empty:
+        st.warning("No relevant candidates found. Consider widening the search criteria.")
+    
     return filtered_df.sort_values(by="match_score", ascending=False).head(5)
 
 # ---------------------------
@@ -169,7 +177,7 @@ def main():
             st.subheader("Review and Edit Job Criteria")
             criteria = st.session_state.current_criteria
 
-            for key in ["job_title", "required_experience", "seniority", "location"]:
+            for key in ["job_title", "required_experience", "seniority", "location", "company"]:
                 criteria[key] = st.text_input(key.replace("_", " ").title(), value=criteria.get(key, ""))
 
             st.session_state.current_criteria = criteria
