@@ -33,7 +33,6 @@ def clean_csv_data(df):
     df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
     df["Connected On"] = pd.to_datetime(df["Connected On"], errors="coerce")
     df["Company"] = df["Company"].astype(str).fillna("")
-    df["Location"] = df["Location"].astype(str).fillna("Unknown Location")
     df.drop_duplicates(inplace=True)
     return df
 
@@ -70,18 +69,15 @@ def extract_job_description(url):
     return extract_job_criteria(" ".join(paragraphs)) if paragraphs else None
 
 def extract_job_criteria(text):
-    """Extracts job title, seniority, required experience, location, and company name from the job description text."""
+    """Extracts job title, seniority, required experience, and company name from the job description text."""
     noun_phrases = re.findall(r"\b[A-Z][a-z]*\s[A-Z][a-z]*\b", text)
     job_title = noun_phrases[0] if noun_phrases else "Unknown Title"
 
     seniority_levels = ["Intern", "Junior", "Mid-Level", "Senior", "Lead", "Manager", "Director", "VP", "Executive"]
-    seniority = next((level for level in seniority_levels if level.lower() in text.lower()), "Unknown Seniority")
+    seniority = next((level for level in seniority_levels if level.lower() in text.lower()), "Unknown Seniority"
 
     experience_match = re.search(r"(\d+)\+?\s*(?:years|yrs|experience)", text, re.IGNORECASE)
     required_experience = f"{experience_match.group(1)}+ years" if experience_match else "Not specified"
-
-    location_match = re.search(r"\b(Location|Based in):\s*([A-Za-z, ]+)", text, re.IGNORECASE)
-    location = location_match.group(2).strip() if location_match else "Unknown Location"
 
     company_match = re.search(r"\bCompany:\s*([A-Za-z0-9& ]+)", text, re.IGNORECASE)
     company = company_match.group(1).strip() if company_match else "Unknown Company"
@@ -90,7 +86,6 @@ def extract_job_criteria(text):
         "job_title": job_title,
         "seniority": seniority,
         "required_experience": required_experience,
-        "location": location,
         "company": company
     }
 
@@ -102,7 +97,6 @@ def match_candidates(connections_df, criteria):
     def score_candidate(row):
         score = 0
         company = str(row.get("Company", "")).lower()
-        location = str(row.get("Location", "")).lower()
 
         # Exclude candidates working at the job's company using fuzzy matching
         if fuzz.partial_ratio(company, criteria["company"].lower()) > 80:
@@ -116,8 +110,8 @@ def match_candidates(connections_df, criteria):
         if criteria["seniority"].lower() in str(row.get("Position", "")).lower():
             score += 20
 
-        # Location match
-        if criteria["location"].lower() in location:
+        # Experience match
+        if criteria["required_experience"].lower() in str(row.get("Position", "")).lower():
             score += 15
 
         return score
@@ -177,7 +171,7 @@ def main():
             st.subheader("Review and Edit Job Criteria")
             criteria = st.session_state.current_criteria
 
-            for key in ["job_title", "required_experience", "seniority", "location", "company"]:
+            for key in ["job_title", "required_experience", "seniority", "company"]:
                 criteria[key] = st.text_input(key.replace("_", " ").title(), value=criteria.get(key, ""))
 
             st.session_state.current_criteria = criteria
@@ -195,7 +189,6 @@ def main():
                     st.markdown(f"### {row['First Name']} {row['Last Name']} - {color}")
                     st.write(f"**Current Job:** {row['Position']}")
                     st.write(f"**Company:** {row['Company']}")
-                    st.write(f"**Location:** {row['Location']}")
                     st.write(f"**Match Score:** {score}")
                     st.markdown(f"🔗 [LinkedIn Profile]({row['URL']})", unsafe_allow_html=True)
                     st.markdown("---")
