@@ -73,7 +73,7 @@ def extract_noun_phrases(text):
     return noun_phrases
 
 def extract_job_criteria(url):
-    """Extracts job title and seniority using regex and simple text processing."""
+    """Extracts job title, seniority, and company name from job posting."""
     job_desc = extract_job_description(url)
     if not job_desc:
         return None
@@ -85,19 +85,28 @@ def extract_job_criteria(url):
     seniority_levels = ["Intern", "Junior", "Mid-Level", "Senior", "Lead", "Manager", "Director", "VP", "Executive"]
     seniority = next((level for level in seniority_levels if level.lower() in job_desc.lower()), "Not specified")
 
+    # Extract company name (Assumption: First capitalized phrase in job post title or first paragraph)
+    company_name_match = re.search(r"at ([A-Z][a-zA-Z0-9&\s]+)", job_desc)
+    company_name = company_name_match.group(1) if company_name_match else "Not specified"
+
     return {
         "job_title": job_title,
-        "seniority": seniority
+        "seniority": seniority,
+        "company_name": company_name
     }
 
 def match_candidates(connections_df, criteria):
-    """Matches candidates based on job criteria."""
+    """Matches candidates based on job criteria while excluding those who already work at the company."""
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
 
     def score_candidate(row):
         score = 0
         company = str(row.get("Company", "")).lower()  # Convert to string to prevent errors
+
+        # Exclude candidates working at the specified company
+        if company == criteria["company_name"].lower():
+            return 0
 
         # Title match
         if criteria["job_title"].lower() in str(row.get("Position", "")).lower():
@@ -171,6 +180,7 @@ def main():
             # Editable fields for extracted criteria
             criteria["job_title"] = st.text_input("Job Title", value=criteria.get("job_title", ""))
             criteria["seniority"] = st.text_input("Seniority", value=criteria.get("seniority", ""))
+            criteria["company_name"] = st.text_input("Company Name", value=criteria.get("company_name", ""))
 
             st.session_state.current_criteria = criteria
 
