@@ -73,7 +73,7 @@ def extract_noun_phrases(text):
     return noun_phrases
 
 def extract_job_criteria(url):
-    """Extracts job title, level, and required experience using regex and simple text processing."""
+    """Extracts job title and seniority using regex and simple text processing."""
     job_desc = extract_job_description(url)
     if not job_desc:
         return None
@@ -85,14 +85,9 @@ def extract_job_criteria(url):
     seniority_levels = ["Intern", "Junior", "Mid-Level", "Senior", "Lead", "Manager", "Director", "VP", "Executive"]
     seniority = next((level for level in seniority_levels if level.lower() in job_desc.lower()), "Not specified")
 
-    # Extract years of experience
-    experience_match = re.search(r"(\d+)\+?\s*(?:years|yrs|YRS|experience)", job_desc, re.IGNORECASE)
-    required_experience = f"{experience_match.group(1)}+ years" if experience_match else "Not specified"
-
     return {
         "job_title": job_title,
-        "seniority": seniority,
-        "required_experience": required_experience
+        "seniority": seniority
     }
 
 def match_candidates(connections_df, criteria):
@@ -111,10 +106,6 @@ def match_candidates(connections_df, criteria):
         # Seniority match
         if criteria["seniority"].lower() in str(row.get("Position", "")).lower():
             score += 20
-
-        # Experience match
-        if criteria["required_experience"].lower() in str(row.get("Position", "")).lower():
-            score += 15
 
         return score
     
@@ -139,34 +130,14 @@ def main():
     if role == "Employee":
         st.header("Upload Your LinkedIn Connections")
 
-        # LinkedIn Download Instructions
         with st.expander("📌 How to Download Your LinkedIn Contacts?"):
             st.markdown("""
             **Follow these steps to download your LinkedIn connections:**
-
             1. **Go to LinkedIn Settings**  
-               - Click on your profile picture (top right).  
-               - Select **"Settings & Privacy"**.  
-
             2. **Request Your Data**  
-               - In the left menu, click **"Data privacy"**.  
-               - Scroll down to **"Get a copy of your data"**.  
-               - Click **"Download your data"**.  
-
             3. **Choose the Data to Export**  
-               - Select **"Connections"** (only this option).  
-               - Click **"Request archive"**.  
-
             4. **Verify & Download**  
-               - Enter your password (if prompted).  
-               - Wait for LinkedIn’s email with a download link.  
-               - Click the link to download the **CSV file**.  
-
             5. **Upload the File Here**  
-               - Click **"Upload CSV file"** below.  
-               - Select the downloaded file from your computer.  
-               - The system will process your contacts automatically.  
-
             ✅ *Once uploaded, you can preview your connections and continue with the matching process!*  
             """)
 
@@ -186,12 +157,22 @@ def main():
         if st.button("Extract Job Criteria"):
             if job_url:
                 criteria = extract_job_criteria(job_url)
-                
+
                 if criteria is None:
                     st.error("Failed to extract job criteria. Please check the job posting URL.")
                 else:
-                    st.session_state.previous_searches[criteria["job_title"]] = criteria
                     st.session_state.current_criteria = criteria
+                    st.success("Job criteria extracted! Please review and edit if needed.")
+
+        if "current_criteria" in st.session_state and st.session_state.current_criteria:
+            st.subheader("Review and Edit Job Criteria")
+            criteria = st.session_state.current_criteria
+
+            # Editable fields for extracted criteria
+            criteria["job_title"] = st.text_input("Job Title", value=criteria.get("job_title", ""))
+            criteria["seniority"] = st.text_input("Seniority", value=criteria.get("seniority", ""))
+
+            st.session_state.current_criteria = criteria
 
         if st.button("Find Matching Candidates") and "connections_df" in st.session_state:
             matching_candidates = match_candidates(st.session_state.connections_df, st.session_state.current_criteria)
@@ -199,4 +180,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
