@@ -138,6 +138,38 @@ def main():
 
     if role == "Employee":
         st.header("Upload Your LinkedIn Connections")
+
+        # LinkedIn Download Instructions
+        with st.expander("📌 How to Download Your LinkedIn Contacts?"):
+            st.markdown("""
+            **Follow these steps to download your LinkedIn connections:**
+
+            1. **Go to LinkedIn Settings**  
+               - Click on your profile picture (top right).  
+               - Select **"Settings & Privacy"**.  
+
+            2. **Request Your Data**  
+               - In the left menu, click **"Data privacy"**.  
+               - Scroll down to **"Get a copy of your data"**.  
+               - Click **"Download your data"**.  
+
+            3. **Choose the Data to Export**  
+               - Select **"Connections"** (only this option).  
+               - Click **"Request archive"**.  
+
+            4. **Verify & Download**  
+               - Enter your password (if prompted).  
+               - Wait for LinkedIn’s email with a download link.  
+               - Click the link to download the **CSV file**.  
+
+            5. **Upload the File Here**  
+               - Click **"Upload CSV file"** below.  
+               - Select the downloaded file from your computer.  
+               - The system will process your contacts automatically.  
+
+            ✅ *Once uploaded, you can preview your connections and continue with the matching process!*  
+            """)
+
         uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
         if uploaded_file:
             connections_df = extract_linkedin_connections(uploaded_file)
@@ -155,28 +187,11 @@ def main():
             if job_url:
                 criteria = extract_job_criteria(job_url)
                 
-                # Fix: Ensure criteria is valid before using it
                 if criteria is None:
                     st.error("Failed to extract job criteria. Please check the job posting URL.")
                 else:
-                    search_key = f"{criteria.get('job_title', 'Unknown Title')} ({criteria.get('seniority', 'Unknown Seniority')})"
-                    st.session_state.previous_searches[search_key] = criteria
+                    st.session_state.previous_searches[criteria["job_title"]] = criteria
                     st.session_state.current_criteria = criteria
-
-        st.sidebar.subheader("Previous Searches")
-        selected_search = st.sidebar.selectbox("Select a past search:", list(st.session_state.previous_searches.keys()), index=len(st.session_state.previous_searches)-1 if st.session_state.previous_searches else None)
-
-        if selected_search:
-            st.session_state.current_criteria = st.session_state.previous_searches.get(selected_search, {})
-
-        if "current_criteria" in st.session_state and st.session_state.current_criteria:
-            st.subheader("Review and Edit Job Criteria")
-            criteria = st.session_state.current_criteria
-
-            for key in ["job_title", "required_experience", "seniority"]:
-                criteria[key] = st.text_input(key.replace("_", " ").title(), value=criteria.get(key, ""))
-
-            st.session_state.current_criteria = criteria
 
         if st.button("Find Matching Candidates") and "connections_df" in st.session_state:
             matching_candidates = match_candidates(st.session_state.connections_df, st.session_state.current_criteria)
@@ -184,3 +199,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
