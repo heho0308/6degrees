@@ -14,30 +14,17 @@ nltk.download("stopwords")
 # ---------------------------
 
 def clean_csv_data(df):
-    """Cleans and standardizes LinkedIn connections CSV, ensuring consistent column structure."""
-    expected_columns = ["First Name", "Last Name", "URL", "Email Address", "Company", "Position", "Location", "Connected On"]
-
-    current_columns = df.columns.tolist()
-
-    # Handle column length mismatch
-    if len(current_columns) > len(expected_columns):
-        df = df.iloc[:, :len(expected_columns)]  # Truncate extra columns
-    elif len(current_columns) < len(expected_columns):
-        for i in range(len(current_columns), len(expected_columns)):
-            df[f"Extra_Column_{i}"] = None  # Add missing columns with default values
-
-    # Rename columns to match the expected structure
+    """Cleans LinkedIn connections CSV."""
+    expected_columns = ["First Name", "Last Name", "URL", "Email Address", "Company", "Position", "Connected On"]
     df.columns = expected_columns
-
-    # Clean and standardize data
     df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
     df["Connected On"] = pd.to_datetime(df["Connected On"], errors="coerce")
-    df["Company"] = df["Company"].astype(str).fillna("")
+    df["Company"] = df["Company"].astype(str).fillna("")  # Convert NaN to empty strings
     df.drop_duplicates(inplace=True)
     return df
 
 def extract_linkedin_connections(csv_file):
-    """Reads and cleans the LinkedIn connections CSV file uploaded by an employee."""
+    """Reads and cleans LinkedIn connections CSV file uploaded by an employee."""
     try:
         df = pd.read_csv(csv_file, skiprows=3, encoding="utf-8")
         df = clean_csv_data(df)
@@ -47,7 +34,7 @@ def extract_linkedin_connections(csv_file):
         return None
 
 def extract_job_description(url):
-    """Fetches the job description from a given job posting URL and extracts criteria."""
+    """Fetches the job description from a given job posting URL."""
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -62,45 +49,60 @@ def extract_job_description(url):
     for tag in job_desc_tags:
         job_section = soup.find(class_=tag) or soup.find(id=tag)
         if job_section:
-            text = job_section.get_text(separator=" ", strip=True)
-            return extract_job_criteria(text)
+            return job_section.get_text(separator=" ", strip=True)
 
     paragraphs = [p.get_text() for p in soup.find_all("p") if len(p.get_text()) > 100]
-    return extract_job_criteria(" ".join(paragraphs)) if paragraphs else None
+    return " ".join(paragraphs) if paragraphs else None
 
-def extract_job_criteria(text):
-    """Extracts job title, seniority, required experience, and company name from the job description text."""
-    noun_phrases = re.findall(r"\b[A-Z][a-z]*\s[A-Z][a-z]*\b", text)
-    job_title = noun_phrases[0] if noun_phrases else "Unknown Title"
+def extract_noun_phrases(text):
+    """Extracts capitalized words and phrases as job titles."""
+    words = text.split()
+    noun_phrases = []
+    temp_phrase = []
 
+    for word in words:
+        if word.istitle():
+            temp_phrase.append(word)
+        else:
+            if temp_phrase:
+                noun_phrases.append(" ".join(temp_phrase))
+                temp_phrase = []
+    if temp_phrase:
+        noun_phrases.append(" ".join(temp_phrase))
+
+    return noun_phrases
+
+def extract_job_criteria(url):
+    """Extracts job title, level, and required experience using regex and simple text processing."""
+    job_desc = extract_job_description(url)
+    if not job_desc:
+        return None
+
+    noun_phrases = extract_noun_phrases(job_desc)
+    job_title = noun_phrases[0] if noun_phrases else "Not Found"
+
+    # Extract seniority level
     seniority_levels = ["Intern", "Junior", "Mid-Level", "Senior", "Lead", "Manager", "Director", "VP", "Executive"]
-    seniority = next((level for level in seniority_levels if level.lower() in text.lower()), "Unknown Seniority"
+    seniority = next((level for level in seniority_levels if level.lower() in job_desc.lower()), "Not specified")
 
-    experience_match = re.search(r"(\d+)\+?\s*(?:years|yrs|experience)", text, re.IGNORECASE)
+    # Extract years of experience
+    experience_match = re.search(r"(\d+)\+?\s*(?:years|yrs|YRS|experience)", job_desc, re.IGNORECASE)
     required_experience = f"{experience_match.group(1)}+ years" if experience_match else "Not specified"
-
-    company_match = re.search(r"\bCompany:\s*([A-Za-z0-9& ]+)", text, re.IGNORECASE)
-    company = company_match.group(1).strip() if company_match else "Unknown Company"
 
     return {
         "job_title": job_title,
         "seniority": seniority,
-        "required_experience": required_experience,
-        "company": company
+        "required_experience": required_experience
     }
 
 def match_candidates(connections_df, criteria):
-    """Matches candidates based on job criteria and excludes candidates working at the job's company."""
+    """Matches candidates based on job criteria."""
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
 
     def score_candidate(row):
         score = 0
-        company = str(row.get("Company", "")).lower()
-
-        # Exclude candidates working at the job's company using fuzzy matching
-        if fuzz.partial_ratio(company, criteria["company"].lower()) > 80:
-            return 0
+        company = str(row.get("Company", "")).lower()  # Convert to string to prevent errors
 
         # Title match
         if criteria["job_title"].lower() in str(row.get("Position", "")).lower():
@@ -118,10 +120,6 @@ def match_candidates(connections_df, criteria):
     
     connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
     filtered_df = connections_df[connections_df["match_score"] > 0]
-    
-    if filtered_df.empty:
-        st.warning("No relevant candidates found. Consider widening the search criteria.")
-    
     return filtered_df.sort_values(by="match_score", ascending=False).head(5)
 
 # ---------------------------
@@ -155,9 +153,13 @@ def main():
 
         if st.button("Extract Job Criteria"):
             if job_url:
-                criteria = extract_job_description(job_url)
-                if criteria:
-                    search_key = f"{criteria['job_title']} ({criteria['seniority']})"
+                criteria = extract_job_criteria(job_url)
+                
+                # Fix: Ensure criteria is valid before using it
+                if criteria is None:
+                    st.error("Failed to extract job criteria. Please check the job posting URL.")
+                else:
+                    search_key = f"{criteria.get('job_title', 'Unknown Title')} ({criteria.get('seniority', 'Unknown Seniority')})"
                     st.session_state.previous_searches[search_key] = criteria
                     st.session_state.current_criteria = criteria
 
@@ -171,30 +173,14 @@ def main():
             st.subheader("Review and Edit Job Criteria")
             criteria = st.session_state.current_criteria
 
-            for key in ["job_title", "required_experience", "seniority", "company"]:
+            for key in ["job_title", "required_experience", "seniority"]:
                 criteria[key] = st.text_input(key.replace("_", " ").title(), value=criteria.get(key, ""))
 
             st.session_state.current_criteria = criteria
 
         if st.button("Find Matching Candidates") and "connections_df" in st.session_state:
             matching_candidates = match_candidates(st.session_state.connections_df, st.session_state.current_criteria)
-
-            if not matching_candidates.empty:
-                st.subheader("Top 5 Matching Candidates (Best to Worst)")
-
-                for _, row in matching_candidates.iterrows():
-                    score = row["match_score"]
-                    color = "🟢 Strong Fit" if score >= 70 else "🟠 Medium Fit" if score >= 50 else "🔴 Weak Fit"
-
-                    st.markdown(f"### {row['First Name']} {row['Last Name']} - {color}")
-                    st.write(f"**Current Job:** {row['Position']}")
-                    st.write(f"**Company:** {row['Company']}")
-                    st.write(f"**Match Score:** {score}")
-                    st.markdown(f"🔗 [LinkedIn Profile]({row['URL']})", unsafe_allow_html=True)
-                    st.markdown("---")
-
-            else:
-                st.error("No matching candidates found.")
+            st.dataframe(matching_candidates)
 
 if __name__ == "__main__":
     main()
