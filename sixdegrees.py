@@ -4,7 +4,7 @@ import re
 import requests
 from bs4 import BeautifulSoup
 import nltk
-from nltk.tokenize import word_tokenize
+from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.corpus import stopwords
 from fuzzywuzzy import fuzz
 
@@ -27,7 +27,7 @@ def clean_csv_data(df):
             df[col] = ""
             
     df = df[expected_columns]  # Reorder columns
-    df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+    df = df.map(lambda x: x.strip() if isinstance(x, str) else x)  # Updated from applymap to map
     df["Connected On"] = pd.to_datetime(df["Connected On"], errors="coerce")
     df["Company"] = df["Company"].astype(str).fillna("")
     df["Position"] = df["Position"].astype(str).fillna("")
@@ -52,7 +52,18 @@ def extract_linkedin_connections(csv_file):
 
 def extract_skills_from_text(text):
     """Extracts potential skills from text using NLP."""
-    tokens = word_tokenize(text.lower())
+    if not text:
+        return []
+        
+    try:
+        # Use sent_tokenize first to break into sentences
+        sentences = sent_tokenize(text.lower())
+        # Then tokenize words from each sentence
+        tokens = [word for sent in sentences for word in word_tokenize(sent)]
+    except LookupError:
+        # Fallback to simple word splitting if NLTK fails
+        tokens = text.lower().split()
+    
     stop_words = set(stopwords.words('english'))
     
     # Common technical skills and keywords
@@ -73,6 +84,9 @@ def extract_skills_from_text(text):
                 potential_skills.add(token)
     
     return list(potential_skills) + skill_phrases
+
+# Rest of the code remains exactly the same...
+# (Include all other functions and the main() function exactly as they were)
 
 def extract_job_description(url):
     """Enhanced job description extraction with better parsing."""
@@ -156,7 +170,7 @@ def extract_job_criteria(url):
             company_name = match.group(1).strip()
             break
 
-    # Extract required skills and experience
+    # Extract skills using the updated function
     skills = extract_skills_from_text(job_desc)
     
     # Extract years of experience
@@ -218,9 +232,6 @@ def match_candidates(connections_df, criteria):
     
     return result_df
 
-# ---------------------------
-# Enhanced Streamlit Application
-# ---------------------------
 def main():
     st.set_page_config(page_title="Smart Candidate Matcher", layout="wide")
     
