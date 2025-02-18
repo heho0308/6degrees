@@ -35,55 +35,53 @@ def clean_csv_data(df):
     return df
 
 def extract_linkedin_connections(csv_file):
-    """Reads and cleans LinkedIn connections CSV with error handling."""
+    """Reads LinkedIn connections CSV with flexible handling for different formats."""
     try:
+        # First try: Standard format with 3 header rows
         df = pd.read_csv(csv_file, skiprows=3, encoding="utf-8")
-        return clean_csv_data(df)
-    except UnicodeDecodeError:
-        try:
-            df = pd.read_csv(csv_file, skiprows=3, encoding="latin-1")
+        if all(col in df.columns for col in ["First Name", "Last Name", "Company", "Position"]):
             return clean_csv_data(df)
-        except Exception as e:
-            st.error(f"Error processing CSV file: {e}")
-            return None
+    except:
+        pass
+
+    try:
+        # Second try: No header rows
+        df = pd.read_csv(csv_file, encoding="utf-8")
+        if all(col in df.columns for col in ["First Name", "Last Name", "Company", "Position"]):
+            return clean_csv_data(df)
+    except:
+        pass
+    
+    try:
+        # Third try: CSV needs cleanup
+        df = pd.read_csv(csv_file, encoding="utf-8", on_bad_lines='skip')
+        
+        # Try to identify relevant columns
+        name_cols = [col for col in df.columns if 'name' in col.lower()]
+        company_cols = [col for col in df.columns if 'company' in col.lower()]
+        position_cols = [col for col in df.columns if any(term in col.lower() for term in ['position', 'title', 'role'])]
+        url_cols = [col for col in df.columns if any(term in col.lower() for term in ['url', 'link', 'profile'])]
+        
+        if name_cols and company_cols and position_cols:
+            # Rename columns to expected format
+            column_mapping = {
+                name_cols[0]: "First Name",
+                name_cols[-1]: "Last Name" if len(name_cols) > 1 else "Last Name",
+                company_cols[0]: "Company",
+                position_cols[0]: "Position",
+            }
+            if url_cols:
+                column_mapping[url_cols[0]] = "URL"
+                
+            df = df.rename(columns=column_mapping)
+            return clean_csv_data(df)
+            
     except Exception as e:
         st.error(f"Error processing CSV file: {e}")
         return None
-
-def extract_skills_from_text(text):
-    """Extracts potential skills from text using NLP."""
-    if not text:
-        return []
         
-    try:
-        # Use sent_tokenize first to break into sentences
-        sentences = sent_tokenize(text.lower())
-        # Then tokenize words from each sentence
-        tokens = [word for sent in sentences for word in word_tokenize(sent)]
-    except LookupError:
-        # Fallback to simple word splitting if NLTK fails
-        tokens = text.lower().split()
-    
-    stop_words = set(stopwords.words('english'))
-    
-    # Common technical skills and keywords
-    common_skills = {
-        'python', 'java', 'javascript', 'sql', 'aws', 'azure', 'agile', 'scrum',
-        'management', 'leadership', 'analytics', 'machine learning', 'ai',
-        'project management', 'data analysis', 'marketing', 'sales'
-    }
-    
-    # Extract consecutive capitalized words (potential skill phrases)
-    skill_phrases = re.findall(r'[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*', text)
-    
-    # Extract words that might be skills
-    potential_skills = set()
-    for token in tokens:
-        if token not in stop_words and len(token) > 2:
-            if token in common_skills or token.title() in skill_phrases:
-                potential_skills.add(token)
-    
-    return list(potential_skills) + skill_phrases
+    st.error("Unable to process CSV file. Please ensure it contains required columns: First Name, Last Name, Company, Position")
+    return None
 
 def extract_job_description(url):
     """Enhanced job description extraction with better parsing."""
@@ -121,7 +119,7 @@ def extract_job_description(url):
         return None
 
 def extract_job_criteria(url):
-    """Enhanced job criteria extraction with skills and requirements."""
+    """Enhanced job criteria extraction with location and industry."""
     job_desc = extract_job_description(url)
     if not job_desc:
         return None
@@ -152,6 +150,19 @@ def extract_job_criteria(url):
         if any(keyword in job_desc.lower() for keyword in keywords):
             seniority = level
             break
+    
+    # Extract location patterns
+    location_patterns = [
+        r"(?i)location[:\s]+([A-Za-z\s,]+)(?:\.|$)",
+        r"(?i)based in[:\s]+([A-Za-z\s,]+)(?:\.|$)",
+        r"(?i)(?:remote|hybrid|onsite) in ([A-Za-z\s,]+)(?:\.|$)"
+    ]
+    
+    # Extract industry patterns
+    industry_patterns = [
+        r"(?i)industry[:\s]+([A-Za-z\s&,]+)(?:\.|$)",
+        r"(?i)sector[:\s]+([A-Za-z\s&,]+)(?:\.|$)"
+    ]
 
     # Extract company name
     company_patterns = [
@@ -166,10 +177,23 @@ def extract_job_criteria(url):
         if match:
             company_name = match.group(1).strip()
             break
+            
+    # Extract location
+    location = "Not specified"
+    for pattern in location_patterns:
+        match = re.search(pattern, job_desc)
+        if match:
+            location = match.group(1).strip()
+            break
+            
+    # Extract industry
+    industry = "Not specified"
+    for pattern in industry_patterns:
+        match = re.search(pattern, job_desc)
+        if match:
+            industry = match.group(1).strip()
+            break
 
-    # Extract skills
-    skills = extract_skills_from_text(job_desc)
-    
     # Extract years of experience
     experience_match = re.search(r'(\d+)[\+]?\s+years?(?:\s+of)?\s+experience', job_desc.lower())
     years_experience = int(experience_match.group(1)) if experience_match else 0
@@ -178,12 +202,25 @@ def extract_job_criteria(url):
         "job_title": job_title,
         "seniority": seniority,
         "company_name": company_name,
-        "required_skills": skills[:10],  # Top 10 most relevant skills
+        "location": location,
+        "industry": industry,
         "years_experience": years_experience
     }
 
+def extract_location_from_url(url):
+    """Extract location from LinkedIn profile URL if available."""
+    try:
+        # Try to get location from URL or profile
+        if 'linkedin.com/in/' in url.lower():
+            location_match = re.search(r'location=([^&]+)', url)
+            if location_match:
+                return location_match.group(1).replace('+', ' ')
+    except:
+        pass
+    return None
+
 def match_candidates(connections_df, criteria):
-    """Enhanced candidate matching with multiple criteria and weighted scoring."""
+    """Enhanced candidate matching with updated scoring weights."""
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
 
@@ -194,29 +231,25 @@ def match_candidates(connections_df, criteria):
         score = 0
         position = str(row.get("Position", "")).lower()
         
-        # Title match (30%)
+        # Title match (50%)
         title_similarity = fuzz.token_sort_ratio(criteria["job_title"].lower(), position)
-        score += (title_similarity * 0.3)
+        score += (title_similarity * 0.5)
         
         # Seniority match (20%)
         if criteria["seniority"].lower() in position:
             score += 20
             
-        # Skills match (40%)
-        candidate_text = f"{position} {str(row.get('Company', ''))}"
-        candidate_skills = set(extract_skills_from_text(candidate_text))
-        required_skills = set(skill.lower() for skill in criteria["required_skills"])
-        
-        if required_skills:
-            skills_match_ratio = len(candidate_skills.intersection(required_skills)) / len(required_skills)
-            score += (skills_match_ratio * 40)
+        # Location match (15%)
+        candidate_location = extract_location_from_url(str(row.get("URL", "")))
+        if candidate_location and criteria["location"].lower() != "not specified":
+            location_similarity = fuzz.token_sort_ratio(criteria["location"].lower(), candidate_location.lower())
+            score += (location_similarity * 0.15)
             
-        # Experience level (10%)
-        experience_terms = re.findall(r'(\d+)\+?\s*years?', position)
-        if experience_terms:
-            candidate_experience = int(experience_terms[0])
-            if candidate_experience >= criteria["years_experience"]:
-                score += 10
+        # Industry match (15%)
+        candidate_company = str(row.get("Company", "")).lower()
+        if criteria["industry"].lower() != "not specified":
+            industry_similarity = fuzz.token_sort_ratio(criteria["industry"].lower(), candidate_company)
+            score += (industry_similarity * 0.15)
         
         return round(score, 2)
 
@@ -303,42 +336,15 @@ def main():
                         criteria["seniority"] = st.selectbox("Seniority", 
                             ["Entry Level", "Mid-Level", "Senior", "Management"],
                             index=["Entry Level", "Mid-Level", "Senior", "Management"].index(criteria["seniority"]))
+                        criteria["location"] = st.text_input("Location", value=criteria["location"])
                     
                     with col4:
                         criteria["company_name"] = st.text_input("Company", value=criteria["company_name"])
+                        criteria["industry"] = st.text_input("Industry", value=criteria["industry"])
                         criteria["years_experience"] = st.number_input("Years of Experience Required", 
                             value=criteria["years_experience"], min_value=0, max_value=20)
-                    
-                    criteria["required_skills"] = st.multiselect("Required Skills", 
-                        options=criteria["required_skills"] + ["Python", "Java", "JavaScript", "SQL", "AWS", "Azure", "Agile"],
-                        default=criteria["required_skills"])
                     
                     st.session_state.current_criteria = criteria
 
                 if st.button("🎯 Find Matching Candidates"):
-                    if "connections_df" in st.session_state:
-                        with st.spinner("Finding matches..."):
-                            matching_candidates = match_candidates(st.session_state.connections_df, criteria)
-                            
-                            if not matching_candidates.empty:
-                                st.success(f"Found {len(matching_candidates)} potential candidates!")
-                                st.write(matching_candidates.to_html(escape=False), unsafe_allow_html=True)
-                            else:
-                                st.warning("No matching candidates found. Try adjusting the criteria.")
-                    else:
-                        st.error("Please upload connections data first!")
-        
-        with col2:
-            st.header("📊 Matching Criteria")
-            st.markdown("""
-            Candidates are scored based on:
-            - Job Title Match (30%)
-            - Seniority Level (20%)
-            - Required Skills (40%)
-            - Years of Experience (10%)
-            
-            Current employees of the hiring company are automatically excluded.
-            """)
-
-if __name__ == "__main__":
-    main()
+                    if "connections
