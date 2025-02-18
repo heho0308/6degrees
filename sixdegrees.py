@@ -347,4 +347,34 @@ def main():
                     st.session_state.current_criteria = criteria
 
                 if st.button("🎯 Find Matching Candidates"):
-                    if "connections
+                    if "connections_df" in st.session_state:
+                        with st.spinner("Finding matches..."):
+                            matching_candidates = match_candidates(st.session_state.connections_df, criteria)
+                            
+                            if not matching_candidates.empty:
+                                st.success(f"Found {len(matching_candidates)} potential candidates!")
+                                st.write(matching_candidates.to_html(escape=False), unsafe_allow_html=True)
+                            else:
+                                st.warning("No matching candidates found. Try adjusting the criteria.")
+                    else:
+                        st.error("Please upload connections data first!")
+        
+        with col2:
+            st.header("📊 Matching Criteria")
+            st.markdown("""
+            Candidates are scored based on:
+            - Job Title Match (50%)
+            - Seniority Level (20%)
+            - Location Match (15%)
+            - Industry Match (15%)
+            
+            Current employees of the hiring company are automatically excluded.
+            
+            Notes:
+            - Location is extracted from LinkedIn profiles
+            - Industry matching uses company information
+            - Fuzzy matching is used for more accurate comparisons
+            """)
+
+if __name__ == "__main__":
+    main()
