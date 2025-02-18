@@ -267,114 +267,157 @@ def match_candidates(connections_df, criteria):
     return result_df
 
 def main():
-    st.set_page_config(page_title="Smart Candidate Matcher", layout="wide")
+    st.set_page_config(
+        page_title="Smart Candidate Matcher",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
     
-    st.title("🎯 Smart Candidate Matcher")
+    # Custom CSS for cleaner sidebar
+    st.markdown("""
+        <style>
+        .sidebar .sidebar-content {
+            background-color: #f8f9fa;
+        }
+        .sidebar .sidebar-content {
+            padding: 2rem 1rem;
+        }
+        section[data-testid="stSidebar"] div[class*="stSidebarUserContent"] {
+            padding: 1.5rem;
+        }
+        .user-info {
+            padding: 1rem;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid #eee;
+        }
+        .nav-item {
+            padding: 0.5rem 0;
+            margin: 0.5rem 0;
+            cursor: pointer;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     
-    st.sidebar.title("User Panel")
-    role = st.sidebar.selectbox("Select Role", ["Employee", "Recruiter"])
-    username = st.sidebar.text_input("Enter your username", value="user1")
-    st.sidebar.write(f"Logged in as: **{username}** ({role})")
+    # Simplified sidebar
+    with st.sidebar:
+        st.image("https://via.placeholder.com/50", width=50)  # Logo placeholder
+        st.title("Candidate Matcher")
+        
+        # Clean user section
+        st.markdown('<div class="user-info">', unsafe_allow_html=True)
+        role = st.selectbox("", ["Employee", "Recruiter"], label_visibility="collapsed")
+        username = st.text_input("", value="user1", label_visibility="collapsed", placeholder="Username")
+        st.markdown(f"**{username}** · {role}")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Navigation items
+        st.markdown("### Menu")
+        st.markdown('<div class="nav-item">', unsafe_allow_html=True)
+        if role == "Employee":
+            st.button("📤 Upload Connections", use_container_width=True)
+            st.button("👥 My Network", use_container_width=True)
+            st.button("⚙️ Settings", use_container_width=True)
+        else:
+            st.button("🔍 Find Candidates", use_container_width=True)
+            st.button("📋 Recent Searches", use_container_width=True)
+            st.button("⚙️ Settings", use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    if "previous_searches" not in st.session_state:
-        st.session_state.previous_searches = {}
-
+    # Main content area
     if role == "Employee":
-        col1, col2 = st.columns([2, 1])
+        col1, col2, col3 = st.columns([6, 1, 3])
         
         with col1:
-            st.header("📤 Upload Your LinkedIn Connections")
-            uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
+            st.header("Upload Your Network")
+            uploaded_file = st.file_uploader("", type=["csv"], label_visibility="collapsed")
             
             if uploaded_file:
                 connections_df = extract_linkedin_connections(uploaded_file)
                 if connections_df is not None:
-                    st.success("✅ Connections uploaded successfully!")
+                    st.success("✅ Network imported successfully")
                     st.session_state.connections_df = connections_df
                     
-                    with st.expander("Preview Connections"):
-                        st.dataframe(connections_df.head(5))
+                    with st.expander("Preview Network", expanded=False):
+                        st.dataframe(
+                            connections_df.head(5),
+                            use_container_width=True,
+                            hide_index=True
+                        )
         
-        with col2:
-            st.header("📋 Instructions")
+        with col3:
             st.markdown("""
-            1. Download your LinkedIn connections:
-                - Go to LinkedIn Settings
-                - Click on "Get a copy of your data"
-                - Select "Connections"
-                - Request archive
-            2. Upload the CSV file here
-            3. Preview your connections
+            ### Quick Start
+            1. Export your LinkedIn connections
+            2. Upload the CSV file
+            3. Start matching candidates
+            
+            Need help? [View guide →]()
             """)
 
     else:  # Recruiter role
-        st.header("🔍 Find Matching Candidates")
+        st.header("Find Matching Candidates")
         
-        col1, col2 = st.columns([2, 1])
+        col1, col2 = st.columns([3, 1])
         
         with col1:
-            job_url = st.text_input("🔗 Paste Job Posting URL")
+            st.markdown("### Job Details")
+            job_url = st.text_input("", placeholder="Paste job posting URL", label_visibility="collapsed")
             
-            if st.button("Extract Job Criteria"):
+            if st.button("Extract Job Details", type="primary", use_container_width=True):
                 if job_url:
                     with st.spinner("Analyzing job posting..."):
                         criteria = extract_job_criteria(job_url)
                         
                         if criteria:
                             st.session_state.current_criteria = criteria
-                            st.success("✅ Job criteria extracted successfully!")
+                            st.success("Job details extracted")
                         else:
-                            st.error("❌ Failed to extract job criteria. Please check the URL.")
+                            st.error("Unable to extract job details. Please check the URL.")
 
             if "current_criteria" in st.session_state:
-                with st.expander("✏️ Review and Edit Job Criteria", expanded=True):
-                    criteria = st.session_state.current_criteria
-                    
-                    col3, col4 = st.columns(2)
-                    with col3:
-                        criteria["job_title"] = st.text_input("Job Title", value=criteria["job_title"])
-                        criteria["seniority"] = st.selectbox("Seniority", 
-                            ["Entry Level", "Mid-Level", "Senior", "Management"],
-                            index=["Entry Level", "Mid-Level", "Senior", "Management"].index(criteria["seniority"]))
-                        criteria["location"] = st.text_input("Location", value=criteria["location"])
-                    
-                    with col4:
-                        criteria["company_name"] = st.text_input("Company", value=criteria["company_name"])
-                        criteria["industry"] = st.text_input("Industry", value=criteria["industry"])
-                        criteria["years_experience"] = st.number_input("Years of Experience Required", 
-                            value=criteria["years_experience"], min_value=0, max_value=20)
-                    
-                    st.session_state.current_criteria = criteria
+                st.markdown("### Matching Criteria")
+                criteria = st.session_state.current_criteria
+                
+                col3, col4 = st.columns(2)
+                with col3:
+                    criteria["job_title"] = st.text_input("Role", value=criteria["job_title"])
+                    criteria["seniority"] = st.selectbox("Level", 
+                        ["Entry Level", "Mid-Level", "Senior", "Management"],
+                        index=["Entry Level", "Mid-Level", "Senior", "Management"].index(criteria["seniority"]))
+                    criteria["location"] = st.text_input("Location", value=criteria["location"])
+                
+                with col4:
+                    criteria["company_name"] = st.text_input("Company", value=criteria["company_name"])
+                    criteria["industry"] = st.text_input("Industry", value=criteria["industry"])
+                
+                st.session_state.current_criteria = criteria
 
-                if st.button("🎯 Find Matching Candidates"):
+                if st.button("Find Matches", type="primary", use_container_width=True):
                     if "connections_df" in st.session_state:
                         with st.spinner("Finding matches..."):
                             matching_candidates = match_candidates(st.session_state.connections_df, criteria)
                             
                             if not matching_candidates.empty:
-                                st.success(f"Found {len(matching_candidates)} potential candidates!")
-                                st.write(matching_candidates.to_html(escape=False), unsafe_allow_html=True)
+                                st.success(f"Found {len(matching_candidates)} potential matches")
+                                st.write(matching_candidates.to_html(escape=False, index=False), unsafe_allow_html=True)
                             else:
-                                st.warning("No matching candidates found. Try adjusting the criteria.")
+                                st.info("No matches found. Try adjusting your criteria.")
                     else:
-                        st.error("Please upload connections data first!")
+                        st.warning("Please upload your network first")
         
         with col2:
-            st.header("📊 Matching Criteria")
             st.markdown("""
-            Candidates are scored based on:
-            - Job Title Match (50%)
-            - Seniority Level (20%)
-            - Location Match (15%)
-            - Industry Match (15%)
+            ### Matching Score
+            - Role Match (50%)
+            - Experience Level (20%)
+            - Location (15%)
+            - Industry (15%)
             
-            Current employees of the hiring company are automatically excluded.
-            
-            Notes:
-            - Location is extracted from LinkedIn profiles
-            - Industry matching uses company information
-            - Fuzzy matching is used for more accurate comparisons
+            *Current employees are excluded*
             """)
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()
