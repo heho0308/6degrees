@@ -8,14 +8,57 @@ from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.corpus import stopwords
 from fuzzywuzzy import fuzz
 
+# Must be the first Streamlit command
+st.set_page_config(
+    page_title="Smart Candidate Matcher",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS for cleaner sidebar
+st.markdown("""
+    <style>
+    .sidebar .sidebar-content {
+        background-color: #f8f9fa;
+    }
+    .sidebar .sidebar-content {
+        padding: 2rem 1rem;
+    }
+    section[data-testid="stSidebar"] div[class*="stSidebarUserContent"] {
+        padding: 1.5rem;
+    }
+    .user-info {
+        padding: 1rem;
+        margin-bottom: 2rem;
+        border-bottom: 1px solid #eee;
+    }
+    .nav-item {
+        padding: 0.5rem 0;
+        margin: 0.5rem 0;
+        cursor: pointer;
+    }
+    .stButton button {
+        width: 100%;
+        border-radius: 4px;
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        padding: 0.5rem 1rem;
+        margin: 0.25rem 0;
+    }
+    .stButton button:hover {
+        background-color: #e9ecef;
+        border-color: #dee2e6;
+    }
+    div[data-testid="stDecoration"] {
+        background-image: none;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # Download required NLTK resources
 nltk.download("punkt")
 nltk.download("stopwords")
 nltk.download("averaged_perceptron_tagger")
-
-# ---------------------------
-# Helper Functions
-# ---------------------------
 
 def clean_csv_data(df):
     """Cleans LinkedIn connections CSV with improved handling."""
@@ -267,37 +310,6 @@ def match_candidates(connections_df, criteria):
     return result_df
 
 def main():
-    st.set_page_config(
-        page_title="Smart Candidate Matcher",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-    
-    # Custom CSS for cleaner sidebar
-    st.markdown("""
-        <style>
-        .sidebar .sidebar-content {
-            background-color: #f8f9fa;
-        }
-        .sidebar .sidebar-content {
-            padding: 2rem 1rem;
-        }
-        section[data-testid="stSidebar"] div[class*="stSidebarUserContent"] {
-            padding: 1.5rem;
-        }
-        .user-info {
-            padding: 1rem;
-            margin-bottom: 2rem;
-            border-bottom: 1px solid #eee;
-        }
-        .nav-item {
-            padding: 0.5rem 0;
-            margin: 0.5rem 0;
-            cursor: pointer;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
     # Simplified sidebar
     with st.sidebar:
         st.image("https://via.placeholder.com/50", width=50)  # Logo placeholder
@@ -345,79 +357,3 @@ def main():
                         )
         
         with col3:
-            st.markdown("""
-            ### Quick Start
-            1. Export your LinkedIn connections
-            2. Upload the CSV file
-            3. Start matching candidates
-            
-            Need help? [View guide →]()
-            """)
-
-    else:  # Recruiter role
-        st.header("Find Matching Candidates")
-        
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            st.markdown("### Job Details")
-            job_url = st.text_input("", placeholder="Paste job posting URL", label_visibility="collapsed")
-            
-            if st.button("Extract Job Details", type="primary", use_container_width=True):
-                if job_url:
-                    with st.spinner("Analyzing job posting..."):
-                        criteria = extract_job_criteria(job_url)
-                        
-                        if criteria:
-                            st.session_state.current_criteria = criteria
-                            st.success("Job details extracted")
-                        else:
-                            st.error("Unable to extract job details. Please check the URL.")
-
-            if "current_criteria" in st.session_state:
-                st.markdown("### Matching Criteria")
-                criteria = st.session_state.current_criteria
-                
-                col3, col4 = st.columns(2)
-                with col3:
-                    criteria["job_title"] = st.text_input("Role", value=criteria["job_title"])
-                    criteria["seniority"] = st.selectbox("Level", 
-                        ["Entry Level", "Mid-Level", "Senior", "Management"],
-                        index=["Entry Level", "Mid-Level", "Senior", "Management"].index(criteria["seniority"]))
-                    criteria["location"] = st.text_input("Location", value=criteria["location"])
-                
-                with col4:
-                    criteria["company_name"] = st.text_input("Company", value=criteria["company_name"])
-                    criteria["industry"] = st.text_input("Industry", value=criteria["industry"])
-                
-                st.session_state.current_criteria = criteria
-
-                if st.button("Find Matches", type="primary", use_container_width=True):
-                    if "connections_df" in st.session_state:
-                        with st.spinner("Finding matches..."):
-                            matching_candidates = match_candidates(st.session_state.connections_df, criteria)
-                            
-                            if not matching_candidates.empty:
-                                st.success(f"Found {len(matching_candidates)} potential matches")
-                                st.write(matching_candidates.to_html(escape=False, index=False), unsafe_allow_html=True)
-                            else:
-                                st.info("No matches found. Try adjusting your criteria.")
-                    else:
-                        st.warning("Please upload your network first")
-        
-        with col2:
-            st.markdown("""
-            ### Matching Score
-            - Role Match (50%)
-            - Experience Level (20%)
-            - Location (15%)
-            - Industry (15%)
-            
-            *Current employees are excluded*
-            """)
-
-if __name__ == "__main__":
-    main()
-
-if __name__ == "__main__":
-    main()
