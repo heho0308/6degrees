@@ -14,7 +14,7 @@ nltk.download("stopwords")
 nltk.download("averaged_perceptron_tagger")
 
 # ---------------------------
-# Enhanced Helper Functions
+# Helper Functions
 # ---------------------------
 
 def clean_csv_data(df):
@@ -27,7 +27,7 @@ def clean_csv_data(df):
             df[col] = ""
             
     df = df[expected_columns]  # Reorder columns
-    df = df.map(lambda x: x.strip() if isinstance(x, str) else x)  # Updated from applymap to map
+    df = df.map(lambda x: x.strip() if isinstance(x, str) else x)
     df["Connected On"] = pd.to_datetime(df["Connected On"], errors="coerce")
     df["Company"] = df["Company"].astype(str).fillna("")
     df["Position"] = df["Position"].astype(str).fillna("")
@@ -84,9 +84,6 @@ def extract_skills_from_text(text):
                 potential_skills.add(token)
     
     return list(potential_skills) + skill_phrases
-
-# Rest of the code remains exactly the same...
-# (Include all other functions and the main() function exactly as they were)
 
 def extract_job_description(url):
     """Enhanced job description extraction with better parsing."""
@@ -170,7 +167,7 @@ def extract_job_criteria(url):
             company_name = match.group(1).strip()
             break
 
-    # Extract skills using the updated function
+    # Extract skills
     skills = extract_skills_from_text(job_desc)
     
     # Extract years of experience
@@ -228,7 +225,11 @@ def match_candidates(connections_df, criteria):
     
     # Sort by score and select columns for display
     result_df = filtered_df.sort_values(by="match_score", ascending=False).head(5)
-    result_df = result_df[["First Name", "Last Name", "Position", "Company", "match_score", "Email Address"]]
+    result_df = result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL"]]
+    
+    # Convert URLs to clickable links
+    result_df = result_df.copy()
+    result_df['URL'] = result_df['URL'].apply(lambda x: f'<a href="{x}" target="_blank">View Profile</a>' if x else "")
     
     return result_df
 
@@ -321,7 +322,7 @@ def main():
                             
                             if not matching_candidates.empty:
                                 st.success(f"Found {len(matching_candidates)} potential candidates!")
-                                st.dataframe(matching_candidates)
+                                st.write(matching_candidates.to_html(escape=False), unsafe_allow_html=True)
                             else:
                                 st.warning("No matching candidates found. Try adjusting the criteria.")
                     else:
