@@ -7,65 +7,15 @@ import nltk
 from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.corpus import stopwords
 from fuzzywuzzy import fuzz
-import json
-from functools import lru_cache
-import time
-
-# Must be the first Streamlit command
-st.set_page_config(
-    page_title="Smart Candidate Matcher",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# Custom CSS for cleaner sidebar
-st.markdown("""
-    <style>
-    .sidebar .sidebar-content {
-        background-color: #f8f9fa;
-    }
-    .sidebar .sidebar-content {
-        padding: 2rem 1rem;
-    }
-    section[data-testid="stSidebar"] div[class*="stSidebarUserContent"] {
-        padding: 1.5rem;
-    }
-    .user-info {
-        padding: 1rem;
-        margin-bottom: 2rem;
-        border-bottom: 1px solid #eee;
-    }
-    .nav-item {
-        padding: 0.5rem 0;
-        margin: 0.5rem 0;
-        cursor: pointer;
-    }
-    .stButton button {
-        width: 100%;
-        border-radius: 4px;
-        background-color: #f8f9fa;
-        border: 1px solid #dee2e6;
-        padding: 0.5rem 1rem;
-        margin: 0.25rem 0;
-    }
-    .stButton button:hover {
-        background-color: #e9ecef;
-        border-color: #dee2e6;
-    }
-    div[data-testid="stDecoration"] {
-        background-image: none;
-    }
-    </style>
-""", unsafe_allow_html=True)
 
 # Download required NLTK resources
 nltk.download("punkt")
 nltk.download("stopwords")
 nltk.download("averaged_perceptron_tagger")
 
-# Initialize session state for location cache if not exists
-if 'location_cache' not in st.session_state:
-    st.session_state.location_cache = {}
+# ---------------------------
+# Helper Functions
+# ---------------------------
 
 def clean_csv_data(df):
     """Cleans LinkedIn connections CSV with improved handling."""
@@ -244,96 +194,33 @@ def extract_job_criteria(url):
             industry = match.group(1).strip()
             break
 
+    # Extract years of experience
+    experience_match = re.search(r'(\d+)[\+]?\s+years?(?:\s+of)?\s+experience', job_desc.lower())
+    years_experience = int(experience_match.group(1)) if experience_match else 0
+
     return {
         "job_title": job_title,
         "seniority": seniority,
         "company_name": company_name,
         "location": location,
-        "industry": industry
+        "industry": industry,
+        "years_experience": years_experience
     }
 
-@lru_cache(maxsize=100)
-def extract_location_from_profile(url):
-    """Extract location from LinkedIn profile with caching and multiple fallback options."""
-    # Check cache first
-    if url in st.session_state.location_cache:
-        return st.session_state.location_cache[url]
-        
-    if not url or 'linkedin.com/in/' not in url.lower():
-        return None
-        
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "DNT": "1",
-        "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1"
-    }
-    
+def extract_location_from_url(url):
+    """Extract location from LinkedIn profile URL if available."""
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Try multiple approaches to find location
-        location = None
-        
-        # Method 1: Look for location in meta tags
-        meta_location = soup.find('meta', {'name': 'profile:location'})
-        if meta_location:
-            location = meta_location.get('content')
-            
-        # Method 2: Look for location in specific HTML elements
-        if not location:
-            location_elements = [
-                soup.find('div', {'class': 'text-body-medium break-words'}),
-                soup.find(lambda tag: tag.name == 'span' and 'location' in tag.get('class', [])),
-                soup.find('div', string=re.compile(r'.*(?:Greater|Area|Region).*'))
-            ]
-            
-            for element in location_elements:
-                if element and element.text.strip():
-                    location = element.text.strip()
-                    break
-        
-        # Method 3: Look for structured data
-        if not location:
-            schema_data = soup.find('script', {'type': 'application/ld+json'})
-            if schema_data:
-                try:
-                    data = json.loads(schema_data.string)
-                    if 'addressLocality' in str(data):
-                        location = data.get('location', {}).get('addressLocality')
-                except:
-                    pass
-        
-        # Clean and validate location
-        if location:
-            # Remove common suffixes and clean up
-            location = re.sub(r'\s*(?:Area|Region|Greater)\s*', ' ', location).strip()
-            # Validate it looks like a real location (at least 2 characters, no strange symbols)
-            if len(location) >= 2 and re.match(r'^[A-Za-z\s,.-]+$', location):
-                # Cache the result
-                st.session_state.location_cache[url] = location
-                return location
-                
-        # Fallback: Try URL parameters
-        location_match = re.search(r'location=([^&]+)', url)
-        if location_match:
-            location = location_match.group(1).replace('+', ' ')
-            st.session_state.location_cache[url] = location
-            return location
-            
-    except Exception as e:
-        st.warning(f"Could not extract location for a candidate. Using fallback matching.", icon="⚠️")
-        
-    # Cache the negative result to avoid repeated attempts
-    st.session_state.location_cache[url] = None
+        # Try to get location from URL or profile
+        if 'linkedin.com/in/' in url.lower():
+            location_match = re.search(r'location=([^&]+)', url)
+            if location_match:
+                return location_match.group(1).replace('+', ' ')
+    except:
+        pass
     return None
 
 def match_candidates(connections_df, criteria):
-    """Enhanced candidate matching with updated scoring weights and location extraction."""
+    """Enhanced candidate matching with updated scoring weights."""
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
 
@@ -353,7 +240,7 @@ def match_candidates(connections_df, criteria):
             score += 20
             
         # Location match (15%)
-        candidate_location = extract_location_from_profile(str(row.get("URL", "")))
+        candidate_location = extract_location_from_url(str(row.get("URL", "")))
         if candidate_location and criteria["location"].lower() != "not specified":
             location_similarity = fuzz.token_sort_ratio(criteria["location"].lower(), candidate_location.lower())
             score += (location_similarity * 0.15)
@@ -365,22 +252,6 @@ def match_candidates(connections_df, criteria):
             score += (industry_similarity * 0.15)
         
         return round(score, 2)
-
-    # Add a progress bar for location extraction
-    # Add a progress bar for location extraction
-    total_candidates = len(connections_df)
-    progress_bar = st.progress(0)
-    progress_text = st.empty()
-    
-    # Pre-fetch locations for all candidates
-    for index, row in connections_df.iterrows():
-        if 'URL' in row and row['URL']:
-            progress_text.text(f"Analyzing candidate {index + 1} of {total_candidates}")
-            extract_location_from_profile(row['URL'])
-            progress_bar.progress((index + 1) / total_candidates)
-    
-    progress_bar.empty()
-    progress_text.empty()
 
     connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
     filtered_df = connections_df[connections_df["match_score"] > 20]  # Minimum score threshold
@@ -396,122 +267,113 @@ def match_candidates(connections_df, criteria):
     return result_df
 
 def main():
-    # Simplified sidebar
-    with st.sidebar:
-        st.image("https://via.placeholder.com/50", width=50)  # Logo placeholder
-        st.title("Candidate Matcher")
-        
-        # Clean user section
-        st.markdown('<div class="user-info">', unsafe_allow_html=True)
-        role = st.selectbox("", ["Employee", "Recruiter"], label_visibility="collapsed")
-        username = st.text_input("", value="user1", label_visibility="collapsed", placeholder="Username")
-        st.markdown(f"**{username}** · {role}")
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Navigation items
-        st.markdown("### Menu")
-        st.markdown('<div class="nav-item">', unsafe_allow_html=True)
-        if role == "Employee":
-            st.button("📤 Upload Connections", use_container_width=True)
-            st.button("👥 My Network", use_container_width=True)
-            st.button("⚙️ Settings", use_container_width=True)
-        else:
-            st.button("🔍 Find Candidates", use_container_width=True)
-            st.button("📋 Recent Searches", use_container_width=True)
-            st.button("⚙️ Settings", use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+    st.set_page_config(page_title="Smart Candidate Matcher", layout="wide")
+    
+    st.title("🎯 Smart Candidate Matcher")
+    
+    st.sidebar.title("User Panel")
+    role = st.sidebar.selectbox("Select Role", ["Employee", "Recruiter"])
+    username = st.sidebar.text_input("Enter your username", value="user1")
+    st.sidebar.write(f"Logged in as: **{username}** ({role})")
 
-    # Main content area
+    if "previous_searches" not in st.session_state:
+        st.session_state.previous_searches = {}
+
     if role == "Employee":
-        col1, col2, col3 = st.columns([6, 1, 3])
+        col1, col2 = st.columns([2, 1])
         
         with col1:
-            st.header("Upload Your Network")
-            uploaded_file = st.file_uploader("", type=["csv"], label_visibility="collapsed")
+            st.header("📤 Upload Your LinkedIn Connections")
+            uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
             
             if uploaded_file:
                 connections_df = extract_linkedin_connections(uploaded_file)
                 if connections_df is not None:
-                    st.success("✅ Network imported successfully")
+                    st.success("✅ Connections uploaded successfully!")
                     st.session_state.connections_df = connections_df
                     
-                    with st.expander("Preview Network", expanded=False):
-                        st.dataframe(
-                            connections_df.head(5),
-                            use_container_width=True,
-                            hide_index=True
-                        )
+                    with st.expander("Preview Connections"):
+                        st.dataframe(connections_df.head(5))
         
-        with col3:
+        with col2:
+            st.header("📋 Instructions")
             st.markdown("""
-            ### Quick Start
-            1. Export your LinkedIn connections
-            2. Upload the CSV file
-            3. Start matching candidates
-            
-            Need help? [View guide →]()
+            1. Download your LinkedIn connections:
+                - Go to LinkedIn Settings
+                - Click on "Get a copy of your data"
+                - Select "Connections"
+                - Request archive
+            2. Upload the CSV file here
+            3. Preview your connections
             """)
 
     else:  # Recruiter role
-        st.header("Find Matching Candidates")
+        st.header("🔍 Find Matching Candidates")
         
-        col1, col2 = st.columns([3, 1])
+        col1, col2 = st.columns([2, 1])
         
         with col1:
-            st.markdown("### Job Details")
-            job_url = st.text_input("", placeholder="Paste job posting URL", label_visibility="collapsed")
+            job_url = st.text_input("🔗 Paste Job Posting URL")
             
-            if st.button("Extract Job Details", type="primary", use_container_width=True):
+            if st.button("Extract Job Criteria"):
                 if job_url:
                     with st.spinner("Analyzing job posting..."):
                         criteria = extract_job_criteria(job_url)
                         
                         if criteria:
                             st.session_state.current_criteria = criteria
-                            st.success("Job details extracted")
+                            st.success("✅ Job criteria extracted successfully!")
                         else:
-                            st.error("Unable to extract job details. Please check the URL.")
+                            st.error("❌ Failed to extract job criteria. Please check the URL.")
 
             if "current_criteria" in st.session_state:
-                st.markdown("### Matching Criteria")
-                criteria = st.session_state.current_criteria
-                
-                col3, col4 = st.columns(2)
-                with col3:
-                    criteria["job_title"] = st.text_input("Role", value=criteria["job_title"])
-                    criteria["seniority"] = st.selectbox("Level", 
-                        ["Entry Level", "Mid-Level", "Senior", "Management"],
-                        index=["Entry Level", "Mid-Level", "Senior", "Management"].index(criteria["seniority"]))
-                    criteria["location"] = st.text_input("Location", value=criteria["location"])
-                
-                with col4:
-                    criteria["company_name"] = st.text_input("Company", value=criteria["company_name"])
-                    criteria["industry"] = st.text_input("Industry", value=criteria["industry"])
-                
-                st.session_state.current_criteria = criteria
+                with st.expander("✏️ Review and Edit Job Criteria", expanded=True):
+                    criteria = st.session_state.current_criteria
+                    
+                    col3, col4 = st.columns(2)
+                    with col3:
+                        criteria["job_title"] = st.text_input("Job Title", value=criteria["job_title"])
+                        criteria["seniority"] = st.selectbox("Seniority", 
+                            ["Entry Level", "Mid-Level", "Senior", "Management"],
+                            index=["Entry Level", "Mid-Level", "Senior", "Management"].index(criteria["seniority"]))
+                        criteria["location"] = st.text_input("Location", value=criteria["location"])
+                    
+                    with col4:
+                        criteria["company_name"] = st.text_input("Company", value=criteria["company_name"])
+                        criteria["industry"] = st.text_input("Industry", value=criteria["industry"])
+                        criteria["years_experience"] = st.number_input("Years of Experience Required", 
+                            value=criteria["years_experience"], min_value=0, max_value=20)
+                    
+                    st.session_state.current_criteria = criteria
 
-                if st.button("Find Matches", type="primary", use_container_width=True):
+                if st.button("🎯 Find Matching Candidates"):
                     if "connections_df" in st.session_state:
                         with st.spinner("Finding matches..."):
                             matching_candidates = match_candidates(st.session_state.connections_df, criteria)
                             
                             if not matching_candidates.empty:
-                                st.success(f"Found {len(matching_candidates)} potential matches")
-                                st.write(matching_candidates.to_html(escape=False, index=False), unsafe_allow_html=True)
+                                st.success(f"Found {len(matching_candidates)} potential candidates!")
+                                st.write(matching_candidates.to_html(escape=False), unsafe_allow_html=True)
                             else:
-                                st.info("No matches found. Try adjusting your criteria.")
+                                st.warning("No matching candidates found. Try adjusting the criteria.")
                     else:
-                        st.warning("Please upload your network first")
+                        st.error("Please upload connections data first!")
         
         with col2:
+            st.header("📊 Matching Criteria")
             st.markdown("""
-            ### Matching Score
-            - Role Match (50%)
-            - Experience Level (20%)
-            - Location (15%)
-            - Industry (15%)
+            Candidates are scored based on:
+            - Job Title Match (50%)
+            - Seniority Level (20%)
+            - Location Match (15%)
+            - Industry Match (15%)
             
-            *Current employees are excluded*
+            Current employees of the hiring company are automatically excluded.
+            
+            Notes:
+            - Location is extracted from LinkedIn profiles
+            - Industry matching uses company information
+            - Fuzzy matching is used for more accurate comparisons
             """)
 
 if __name__ == "__main__":
