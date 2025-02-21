@@ -330,23 +330,23 @@ def extract_job_criteria(url):
 @lru_cache(maxsize=100)
 def extract_location_from_profile(url):
     """Extract location from LinkedIn profile with caching and multiple fallback options."""
-    # Check cache first
-    if url in st.session_state.location_cache:
-        return st.session_state.location_cache[url]
-        
-    if not url or 'linkedin.com/in/' not in url.lower():
-        return None
-        
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "DNT": "1",
-        "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1"
-    }
-    
     try:
+        # Check cache first
+        if url in st.session_state.location_cache:
+            return st.session_state.location_cache[url]
+            
+        if not url or 'linkedin.com/in/' not in url.lower():
+            return None
+            
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "DNT": "1",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1"
+        }
+        
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -390,8 +390,7 @@ def extract_location_from_profile(url):
             # Validate it looks like a real location (at least 2 characters, no strange symbols)
             if len(location) >= 2 and re.match(r'^[A-Za-z\s,.-]+$', location):
                 # Cache the result
-                st.session_state.location_
-st.session_state.location_cache[url] = location
+                st.session_state.location_cache[url] = location
                 return location
                 
         # Fallback: Try URL parameters
