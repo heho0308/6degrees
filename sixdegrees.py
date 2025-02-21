@@ -18,119 +18,55 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Modern sidebar styling
-st.markdown("""
-    <style>
-    /* Clean, modern sidebar */
-    section[data-testid="stSidebar"] {
-        background-color: #FFFFFF;
-        border-right: 1px solid #EAECF0;
-        padding: 0;
-    }
-    section[data-testid="stSidebar"] > div {
-        padding: 1.5rem 1rem;
-    }
-    
-    /* Header area styling */
-    .sidebar-header {
-        padding-bottom: 1.5rem;
-        margin-bottom: 1.5rem;
-        border-bottom: 1px solid #EAECF0;
-    }
-    
-    /* Profile section */
-    .profile-section {
-        display: flex;
-        align-items: center;
-        padding: 0.75rem 0;
-        margin: 1rem 0;
-        gap: 0.75rem;
-    }
-    .profile-info {
-        font-size: 0.875rem;
-        color: #344054;
-    }
-    
-    /* Navigation styling */
-    .nav-section {
-        padding: 0.5rem 0;
-    }
-    .nav-header {
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        color: #667085;
-        letter-spacing: 0.05em;
-        margin-bottom: 0.75rem;
-    }
-    .nav-item {
-        display: flex;
-        align-items: center;
-        padding: 0.5rem 0.75rem;
-        color: #344054;
-        text-decoration: none;
-        border-radius: 6px;
-        margin: 0.25rem 0;
-        transition: all 0.2s;
-    }
-    .nav-item:hover {
-        background-color: #F9FAFB;
-    }
-    .nav-item.active {
-        background-color: #F5F5F5;
-        font-weight: 500;
-    }
-    
-    /* Button improvements */
-    .stButton button {
-        width: 100%;
-        border: none !important;
-        padding: 0.5rem 0.75rem;
-        background: transparent !important;
-        color: #344054 !important;
-        font-weight: normal !important;
-        text-align: left;
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-    }
-    .stButton button:hover {
-        background-color: #F9FAFB !important;
-    }
-    .stSelectbox > div[data-baseweb="select"] {
-        background-color: transparent;
-        border: none;
-        padding: 0;
-    }
-    
-    /* Custom separator */
-    .separator {
-        height: 1px;
-        background-color: #EAECF0;
-        margin: 1rem 0;
-    }
-    
-    /* Hide default decorations */
-    div[data-testid="stDecoration"] {
-        display: none;
-    }
-    
-    /* Streamlit elements cleanup */
-    .stTextInput input {
-        background: transparent;
-        border: none;
-        padding: 0;
-        font-size: 0.875rem;
-    }
-    
-    /* Main content area improvements */
-    .main .block-container {
-        padding-top: 2rem;
-    }
-    div[data-testid="stToolbar"] {
-        display: none;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# Modern sidebar
+    with st.sidebar:
+        # Header with logo and title
+        st.markdown('<div class="sidebar-header">', unsafe_allow_html=True)
+        st.image("https://via.placeholder.com/32", width=32)
+        st.markdown("<span style='font-size: 1.2rem; font-weight: 600; color: #101828;'>Candidate Matcher</span>", unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # User profile section
+        st.markdown('<div class="profile-section">', unsafe_allow_html=True)
+        first_initial = username[0].upper() if username else "U"
+        st.markdown(f"""
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <div class="profile-image">{first_initial}</div>
+                <div class="profile-info">
+                    <div style="font-weight: 500; color: #101828">{username}</div>
+                    <div style="font-size: 0.75rem; color: #667085">{role}</div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Navigation
+        st.markdown('<div class="nav-section">', unsafe_allow_html=True)
+        st.markdown('<div class="nav-header">Navigation</div>', unsafe_allow_html=True)
+        
+        if role == "Employee":
+            nav_items = [
+                ("📤", "Upload Network", True),
+                ("👥", "My Connections", False),
+                ("📋", "Recent Activity", False),
+                ("⚙️", "Settings", False)
+            ]
+        else:
+            nav_items = [
+                ("🔍", "Find Candidates", True),
+                ("📊", "Match History", False),
+                ("📋", "Saved Searches", False),
+                ("⚙️", "Settings", False)
+            ]
+        
+        for icon, label, active in nav_items:
+            st.markdown(
+                f"""<div class="nav-item {'active' if active else ''}">
+                    <span style="margin-right: 12px">{icon}</span> {label}
+                </div>""",
+                unsafe_allow_html=True
+            )
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # Download required NLTK resources
 nltk.download("punkt")
