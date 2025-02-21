@@ -391,3 +391,256 @@ def extract_location_from_profile(url):
             if len(location) >= 2 and re.match(r'^[A-Za-z\s,.-]+$', location):
                 # Cache the result
                 st.session_state.location_
+st.session_state.location_cache[url] = location
+                return location
+                
+        # Fallback: Try URL parameters
+        location_match = re.search(r'location=([^&]+)', url)
+        if location_match:
+            location = location_match.group(1).replace('+', ' ')
+            st.session_state.location_cache[url] = location
+            return location
+            
+    except Exception as e:
+        st.warning(f"Could not extract location for a candidate. Using fallback matching.", icon="⚠️")
+        
+    # Cache the negative result to avoid repeated attempts
+    st.session_state.location_cache[url] = None
+    return None
+
+def match_candidates(connections_df, criteria):
+    """Enhanced candidate matching with updated scoring weights."""
+    if connections_df is None or connections_df.empty:
+        return pd.DataFrame()
+
+    def score_candidate(row):
+        if str(row.get("Company", "")).lower() == criteria["company_name"].lower():
+            return 0  # Exclude current employees
+            
+        score = 0
+        position = str(row.get("Position", "")).lower()
+        
+        # Title match (50%)
+        title_similarity = fuzz.token_sort_ratio(criteria["job_title"].lower(), position)
+        score += (title_similarity * 0.5)
+        
+        # Seniority match (20%)
+        if criteria["seniority"].lower() in position:
+            score += 20
+            
+        # Location match (15%)
+        candidate_location = extract_location_from_profile(str(row.get("URL", "")))
+        if candidate_location and criteria["location"].lower() != "not specified":
+            location_similarity = fuzz.token_sort_ratio(criteria["location"].lower(), candidate_location.lower())
+            score += (location_similarity * 0.15)
+            
+        # Industry match (15%)
+        candidate_company = str(row.get("Company", "")).lower()
+        if criteria["industry"].lower() != "not specified":
+            industry_similarity = fuzz.token_sort_ratio(criteria["industry"].lower(), candidate_company)
+            score += (industry_similarity * 0.15)
+        
+        return round(score, 2)
+
+    connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
+    filtered_df = connections_df[connections_df["match_score"] > 20]  # Minimum score threshold
+    
+    # Sort by score and select columns for display
+    result_df = filtered_df.sort_values(by="match_score", ascending=False).head(5)
+    result_df = result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL"]]
+    
+    # Convert URLs to clickable links
+    result_df = result_df.copy()
+    result_df['URL'] = result_df['URL'].apply(lambda x: f'<a href="{x}" target="_blank">View Profile</a>' if x else "")
+    
+    return result_df
+
+def main():
+    # Modern sidebar
+    with st.sidebar:
+        # Header with logo and title
+        st.markdown('<div class="sidebar-header">', unsafe_allow_html=True)
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.image("https://via.placeholder.com/40", width=40)
+        with col2:
+            st.markdown("<h3 style='margin: 0; padding: 8px 0; color: #101828;'>Candidate Matcher</h3>", unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # User profile section
+        st.markdown('<div class="profile-section">', unsafe_allow_html=True)
+        role = st.selectbox("", ["Employee", "Recruiter"], label_visibility="collapsed")
+        username = st.text_input("", value="user1", label_visibility="collapsed", placeholder="Username")
+        st.markdown(
+            f"""<div class="profile-info">
+                <div style="font-weight: 500">{username}</div>
+                <div style="color: #667085">{role}</div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Navigation
+        st.markdown('<div class="nav-section">', unsafe_allow_html=True)
+        st.markdown('<div class="nav-header">Menu</div>', unsafe_allow_html=True)
+        
+        if role == "Employee":
+            nav_items = [
+                ("📤", "Upload Network", True),
+                ("👥", "My Connections", False),
+                ("📋", "Recent Activity", False),
+                ("⚙️", "Settings", False)
+            ]
+        else:
+            nav_items = [
+                ("🔍", "Find Candidates", True),
+                ("📊", "Match History", False),
+                ("📋", "Saved Searches", Fals    # Add a progress bar for location extraction
+    total_candidates = len(connections_df)
+    progress_bar = st.progress(0)
+    progress_text = st.empty()
+    
+    # Pre-fetch locations for all candidates
+    for index, row in connections_df.iterrows():
+        if 'URL' in row and row['URL']:
+            progress_text.text(f"Analyzing candidate {index + 1} of {total_candidates}")
+            extract_location_from_profile(row['URL'])
+            progress_bar.progress((index + 1) / total_candidates)
+    
+    progress_bar.empty()
+    progress_text.empty()
+
+    connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
+    filtered_df = connections_df[connections_df["match_score"] > 20]  # Minimum score threshold
+    
+    # Sort by score and select columns for display
+    result_df = filtered_df.sort_values(by="match_score", ascending=False).head(5)
+    result_df = result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL"]]
+    
+    # Convert URLs to clickable links
+    result_df = result_df.copy()
+    result_df['URL'] = result_df['URL'].apply(lambda x: f'<a href="{x}" target="_blank">View Profile</a>' if x else "")
+    
+    return result_df
+
+def main():
+    # Simplified sidebar
+    with st.sidebar:
+        st.image("https://via.placeholder.com/50", width=50)  # Logo placeholder
+        st.title("Candidate Matcher")
+        
+        # Clean user section
+        st.markdown('<div class="user-info">', unsafe_allow_html=True)
+        role = st.selectbox("", ["Employee", "Recruiter"], label_visibility="collapsed")
+        username = st.text_input("", value="user1", label_visibility="collapsed", placeholder="Username")
+        st.markdown(f"**{username}** · {role}")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Navigation items
+        st.markdown("### Menu")
+        st.markdown('<div class="nav-item">', unsafe_allow_html=True)
+        if role == "Employee":
+            st.button("📤 Upload Connections", use_container_width=True)
+            st.button("👥 My Network", use_container_width=True)
+            st.button("⚙️ Settings", use_container_width=True)
+        else:
+            st.button("🔍 Find Candidates", use_container_width=True)
+            st.button("📋 Recent Searches", use_container_width=True)
+            st.button("⚙️ Settings", use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # Main content area
+    if role == "Employee":
+        col1, col2, col3 = st.columns([6, 1, 3])
+        
+        with col1:
+            st.header("Upload Your Network")
+            uploaded_file = st.file_uploader("", type=["csv"], label_visibility="collapsed")
+            
+            if uploaded_file:
+                connections_df = extract_linkedin_connections(uploaded_file)
+                if connections_df is not None:
+                    st.success("✅ Network imported successfully")
+                    st.session_state.connections_df = connections_df
+                    
+                    with st.expander("Preview Network", expanded=False):
+                        st.dataframe(
+                            connections_df.head(5),
+                            use_container_width=True,
+                            hide_index=True
+                        )
+        
+        with col3:
+            st.markdown("""
+            ### Quick Start
+            1. Export your LinkedIn connections
+            2. Upload the CSV file
+            3. Start matching candidates
+            
+            Need help? [View guide →]()
+            """)
+
+    else:  # Recruiter role
+        st.header("Find Matching Candidates")
+        
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            st.markdown("### Job Details")
+            job_url = st.text_input("", placeholder="Paste job posting URL", label_visibility="collapsed")
+            
+            if st.button("Extract Job Details", type="primary", use_container_width=True):
+                if job_url:
+                    with st.spinner("Analyzing job posting..."):
+                        criteria = extract_job_criteria(job_url)
+                        
+                        if criteria:
+                            st.session_state.current_criteria = criteria
+                            st.success("Job details extracted")
+                        else:
+                            st.error("Unable to extract job details. Please check the URL.")
+
+            if "current_criteria" in st.session_state:
+                st.markdown("### Matching Criteria")
+                criteria = st.session_state.current_criteria
+                
+                col3, col4 = st.columns(2)
+                with col3:
+                    criteria["job_title"] = st.text_input("Role", value=criteria["job_title"])
+                    criteria["seniority"] = st.selectbox("Level", 
+                        ["Entry Level", "Mid-Level", "Senior", "Management"],
+                        index=["Entry Level", "Mid-Level", "Senior", "Management"].index(criteria["seniority"]))
+                    criteria["location"] = st.text_input("Location", value=criteria["location"])
+                
+                with col4:
+                    criteria["company_name"] = st.text_input("Company", value=criteria["company_name"])
+                    criteria["industry"] = st.text_input("Industry", value=criteria["industry"])
+                
+                st.session_state.current_criteria = criteria
+
+                if st.button("Find Matches", type="primary", use_container_width=True):
+                    if "connections_df" in st.session_state:
+                        with st.spinner("Finding matches..."):
+                            matching_candidates = match_candidates(st.session_state.connections_df, criteria)
+                            
+                            if not matching_candidates.empty:
+                                st.success(f"Found {len(matching_candidates)} potential matches")
+                                st.write(matching_candidates.to_html(escape=False, index=False), unsafe_allow_html=True)
+                            else:
+                                st.info("No matches found. Try adjusting your criteria.")
+                    else:
+                        st.warning("Please upload your network first")
+        
+        with col2:
+            st.markdown("""
+            ### Matching Score
+            - Role Match (50%)
+            - Experience Level (20%)
+            - Location (15%)
+            - Industry (15%)
+            
+            *Current employees are excluded*
+            """)
+
+if __name__ == "__main__":
+    main()
