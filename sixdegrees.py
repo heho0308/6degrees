@@ -7,165 +7,15 @@ import nltk
 from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.corpus import stopwords
 from fuzzywuzzy import fuzz
-import json
-from functools import lru_cache
-import time
-
-# Must be the first Streamlit command
-st.set_page_config(
-    page_title="Smart Candidate Matcher",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# Modern sidebar styling
-st.markdown("""
-    <style>
-    /* Modern sidebar - core styles */
-    section[data-testid="stSidebar"] {
-        background-color: #FFFFFF !important;
-        border-right: 1px solid #EAECF0;
-        padding: 0;
-        min-width: 250px !important;
-    }
-    section[data-testid="stSidebar"] > div {
-        padding: 1.5rem 1rem;
-        background: white;
-    }
-    [data-testid="stSidebar"] [data-testid="stMarkdown"] {
-        padding: 0;
-    }
-    
-    /* Header area styling */
-    .sidebar-header {
-        padding: 0 0.5rem 1.5rem 0.5rem;
-        margin-bottom: 1.5rem;
-        border-bottom: 1px solid #EAECF0;
-        display: flex;
-        align-items: center;
-        gap: 0.8rem;
-    }
-    
-    /* Profile section */
-    .profile-section {
-        background-color: #F9FAFB;
-        border-radius: 8px;
-        padding: 0.75rem;
-        margin: 1rem 0.5rem;
-    }
-    .profile-info {
-        font-size: 0.875rem;
-        color: #344054;
-        margin-top: 0.5rem;
-    }
-    
-    /* Navigation styling */
-    .nav-section {
-        padding: 0.5rem;
-        margin-top: 1.5rem;
-    }
-    .nav-header {
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        color: #667085;
-        letter-spacing: 0.05em;
-        margin-bottom: 0.75rem;
-        font-weight: 500;
-    }
-    .nav-item {
-        display: flex;
-        align-items: center;
-        padding: 0.6rem 0.75rem;
-        color: #344054;
-        text-decoration: none;
-        border-radius: 6px;
-        margin: 0.2rem 0;
-        transition: all 0.2s;
-        font-size: 0.875rem;
-        cursor: pointer;
-    }
-    .nav-item:hover {
-        background-color: #F9FAFB;
-    }
-    .nav-item.active {
-        background-color: #F5F5F5;
-        color: #101828;
-        font-weight: 500;
-    }
-    
-    /* Streamlit element overrides */
-    [data-testid="stVerticalBlock"] {
-        gap: 0;
-        padding: 0;
-    }
-    .st-emotion-cache-16txtl3 {
-        padding: 0;
-    }
-    .st-emotion-cache-16idsys p {
-        font-size: 14px;
-    }
-    
-    /* Custom separator */
-    .separator {
-        height: 1px;
-        background-color: #EAECF0;
-        margin: 1rem 0;
-    }
-    
-    /* Hide default decorations */
-    div[data-testid="stDecoration"] {
-        display: none;
-    }
-    
-    /* Input field improvements */
-    .stTextInput input {
-        background: transparent;
-        border: 1px solid #D0D5DD !important;
-        padding: 0.5rem !important;
-        font-size: 0.875rem;
-        border-radius: 6px;
-    }
-    .stTextInput input:focus {
-        border-color: #2563EB !important;
-        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
-    }
-    
-    /* Selectbox improvements */
-    .stSelectbox > div[data-baseweb="select"] {
-        background: transparent;
-        border: 1px solid #D0D5DD !important;
-        padding: 0.5rem !important;
-        font-size: 0.875rem;
-        border-radius: 6px !important;
-    }
-    .stSelectbox > div[data-baseweb="select"]:hover {
-        border-color: #2563EB !important;
-    }
-    
-    /* Profile image */
-    .profile-image {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        background: #F2F4F7;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 14px;
-        color: #475467;
-        font-weight: 500;
-    }
-    </style>
-""", unsafe_allow_html=True)
 
 # Download required NLTK resources
-nltk.download("punkt", quiet=True)
-nltk.download("stopwords", quiet=True)
-nltk.download("averaged_perceptron_tagger", quiet=True)
+nltk.download("punkt")
+nltk.download("stopwords")
+nltk.download("averaged_perceptron_tagger")
 
-# Initialize session state for location cache if not exists
-if 'location_cache' not in st.session_state:
-    st.session_state.location_cache = {}
+# ---------------------------
+# Helper Functions
+# ---------------------------
 
 def clean_csv_data(df):
     """Cleans LinkedIn connections CSV with improved handling."""
@@ -344,49 +194,188 @@ def extract_job_criteria(url):
             industry = match.group(1).strip()
             break
 
+    # Extract years of experience
+    experience_match = re.search(r'(\d+)[\+]?\s+years?(?:\s+of)?\s+experience', job_desc.lower())
+    years_experience = int(experience_match.group(1)) if experience_match else 0
+
     return {
         "job_title": job_title,
         "seniority": seniority,
         "company_name": company_name,
         "location": location,
         "industry": industry,
-        "years_experience": 0
+        "years_experience": years_experience
     }
 
-@lru_cache(maxsize=100)
-def extract_location_from_profile(url):
-    """Extract location from LinkedIn profile with caching and multiple fallback options."""
+def extract_location_from_url(url):
+    """Extract location from LinkedIn profile URL if available."""
     try:
-        # Check cache first
-        if url in st.session_state.location_cache:
-            return st.session_state.location_cache[url]
+        # Try to get location from URL or profile
+        if 'linkedin.com/in/' in url.lower():
+            location_match = re.search(r'location=([^&]+)', url)
+            if location_match:
+                return location_match.group(1).replace('+', ' ')
+    except:
+        pass
+    return None
+
+def match_candidates(connections_df, criteria):
+    """Enhanced candidate matching with updated scoring weights."""
+    if connections_df is None or connections_df.empty:
+        return pd.DataFrame()
+
+    def score_candidate(row):
+        if str(row.get("Company", "")).lower() == criteria["company_name"].lower():
+            return 0  # Exclude current employees
             
-        if not url or 'linkedin.com/in/' not in url.lower():
-            return None
+        score = 0
+        position = str(row.get("Position", "")).lower()
+        
+        # Title match (50%)
+        title_similarity = fuzz.token_sort_ratio(criteria["job_title"].lower(), position)
+        score += (title_similarity * 0.5)
+        
+        # Seniority match (20%)
+        if criteria["seniority"].lower() in position:
+            score += 20
             
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-            "DNT": "1",
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1"
-        }
-        
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Try multiple approaches to find location
-        location = None
-        
-        # Method 1: Look for location in meta tags
-        meta_location = soup.find('meta', {'name': 'profile:location'})
-        if meta_location:
-            location = meta_location.get('content')
+        # Location match (15%)
+        candidate_location = extract_location_from_url(str(row.get("URL", "")))
+        if candidate_location and criteria["location"].lower() != "not specified":
+            location_similarity = fuzz.token_sort_ratio(criteria["location"].lower(), candidate_location.lower())
+            score += (location_similarity * 0.15)
             
-        # Method 2: Look for location in specific HTML elements
-        if not location:
-            location_elements = [
-                soup.find('div', {'class': 'text-body-medium break-words'}),
-                soup.find(
+        # Industry match (15%)
+        candidate_company = str(row.get("Company", "")).lower()
+        if criteria["industry"].lower() != "not specified":
+            industry_similarity = fuzz.token_sort_ratio(criteria["industry"].lower(), candidate_company)
+            score += (industry_similarity * 0.15)
+        
+        return round(score, 2)
+
+    connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
+    filtered_df = connections_df[connections_df["match_score"] > 20]  # Minimum score threshold
+    
+    # Sort by score and select columns for display
+    result_df = filtered_df.sort_values(by="match_score", ascending=False).head(5)
+    result_df = result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL"]]
+    
+    # Convert URLs to clickable links
+    result_df = result_df.copy()
+    result_df['URL'] = result_df['URL'].apply(lambda x: f'<a href="{x}" target="_blank">View Profile</a>' if x else "")
+    
+    return result_df
+
+def main():
+    st.set_page_config(page_title="Smart Candidate Matcher", layout="wide")
+    
+    st.title("🎯 Smart Candidate Matcher")
+    
+    st.sidebar.title("User Panel")
+    role = st.sidebar.selectbox("Select Role", ["Employee", "Recruiter"])
+    username = st.sidebar.text_input("Enter your username", value="user1")
+    st.sidebar.write(f"Logged in as: **{username}** ({role})")
+
+    if "previous_searches" not in st.session_state:
+        st.session_state.previous_searches = {}
+
+    if role == "Employee":
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.header("📤 Upload Your LinkedIn Connections")
+            uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
+            
+            if uploaded_file:
+                connections_df = extract_linkedin_connections(uploaded_file)
+                if connections_df is not None:
+                    st.success("✅ Connections uploaded successfully!")
+                    st.session_state.connections_df = connections_df
+                    
+                    with st.expander("Preview Connections"):
+                        st.dataframe(connections_df.head(5))
+        
+        with col2:
+            st.header("📋 Instructions")
+            st.markdown("""
+            1. Download your LinkedIn connections:
+                - Go to LinkedIn Settings
+                - Click on "Get a copy of your data"
+                - Select "Connections"
+                - Request archive
+            2. Upload the CSV file here
+            3. Preview your connections
+            """)
+
+    else:  # Recruiter role
+        st.header("🔍 Find Matching Candidates")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            job_url = st.text_input("🔗 Paste Job Posting URL")
+            
+            if st.button("Extract Job Criteria"):
+                if job_url:
+                    with st.spinner("Analyzing job posting..."):
+                        criteria = extract_job_criteria(job_url)
+                        
+                        if criteria:
+                            st.session_state.current_criteria = criteria
+                            st.success("✅ Job criteria extracted successfully!")
+                        else:
+                            st.error("❌ Failed to extract job criteria. Please check the URL.")
+
+            if "current_criteria" in st.session_state:
+                with st.expander("✏️ Review and Edit Job Criteria", expanded=True):
+                    criteria = st.session_state.current_criteria
+                    
+                    col3, col4 = st.columns(2)
+                    with col3:
+                        criteria["job_title"] = st.text_input("Job Title", value=criteria["job_title"])
+                        criteria["seniority"] = st.selectbox("Seniority", 
+                            ["Entry Level", "Mid-Level", "Senior", "Management"],
+                            index=["Entry Level", "Mid-Level", "Senior", "Management"].index(criteria["seniority"]))
+                        criteria["location"] = st.text_input("Location", value=criteria["location"])
+                    
+                    with col4:
+                        criteria["company_name"] = st.text_input("Company", value=criteria["company_name"])
+                        criteria["industry"] = st.text_input("Industry", value=criteria["industry"])
+                        criteria["years_experience"] = st.number_input("Years of Experience Required", 
+                            value=criteria["years_experience"], min_value=0, max_value=20)
+                    
+                    st.session_state.current_criteria = criteria
+
+                if st.button("🎯 Find Matching Candidates"):
+                    if "connections_df" in st.session_state:
+                        with st.spinner("Finding matches..."):
+                            matching_candidates = match_candidates(st.session_state.connections_df, criteria)
+                            
+                            if not matching_candidates.empty:
+                                st.success(f"Found {len(matching_candidates)} potential candidates!")
+                                st.write(matching_candidates.to_html(escape=False), unsafe_allow_html=True)
+                            else:
+                                st.warning("No matching candidates found. Try adjusting the criteria.")
+                    else:
+                        st.error("Please upload connections data first!")
+        
+        with col2:
+            st.header("📊 Matching Criteria")
+            st.markdown("""
+            Candidates are scored based on:
+            - Job Title Match (50%)
+            - Seniority Level (20%)
+            - Location Match (15%)
+            - Industry Match (15%)
+            
+            Current employees of the hiring company are automatically excluded.
+            
+            Notes:
+            - Location is extracted from LinkedIn profiles
+            - Industry matching uses company information
+            - Fuzzy matching is used for more accurate comparisons
+            """)
+
+if __name__ == "__main__":
+    main()
+
