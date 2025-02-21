@@ -441,6 +441,21 @@ def match_candidates(connections_df, criteria):
         
         return round(score, 2)
 
+    # Add a progress bar for location extraction
+    total_candidates = len(connections_df)
+    progress_bar = st.progress(0)
+    progress_text = st.empty()
+    
+    # Pre-fetch locations for all candidates
+    for index, row in connections_df.iterrows():
+        if 'URL' in row and row['URL']:
+            progress_text.text(f"Analyzing candidate {index + 1} of {total_candidates}")
+            extract_location_from_profile(row['URL'])
+            progress_bar.progress((index + 1) / total_candidates)
+    
+    progress_bar.empty()
+    progress_text.empty()
+
     connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
     filtered_df = connections_df[connections_df["match_score"] > 20]  # Minimum score threshold
     
@@ -494,10 +509,9 @@ def main():
             nav_items = [
                 ("🔍", "Find Candidates", True),
                 ("📊", "Match History", False),
-                ("📋", "Saved Searches", Fals    # Add a progress bar for location extraction
-    total_candidates = len(connections_df)
-    progress_bar = st.progress(0)
-    progress_text = st.empty()
+                ("📋", "Saved Searches", False),
+                ("⚙️", "Settings", False)
+            ]
     
     # Pre-fetch locations for all candidates
     for index, row in connections_df.iterrows():
