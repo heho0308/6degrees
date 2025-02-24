@@ -226,95 +226,43 @@ def match_candidates(connections_df, criteria):
 
     def score_candidate(row):
         if str(row.get("Company", "")).lower() == criteria["company_name"].lower():
-            return {
-                'total_score': 0,
-                'breakdown': {
-                    'title': 0,
-                    'seniority': 0,
-                    'location': 0,
-                    'industry': 0,
-                    'notes': ['Excluded - Current employee of hiring company']
-                }
-            }
+            return 0  # Exclude current employees
             
+        score = 0
         position = str(row.get("Position", "")).lower()
-        notes = []
         
         # Title match (50%)
         title_similarity = fuzz.token_sort_ratio(criteria["job_title"].lower(), position)
-        title_score = title_similarity * 0.5
-        if title_similarity < 40:
-            notes.append("Low title match")
+        score += (title_similarity * 0.5)
         
         # Seniority match (20%)
-        seniority_score = 20 if criteria["seniority"].lower() in position else 0
-        if seniority_score == 0:
-            notes.append("Seniority level mismatch")
-        
+        if criteria["seniority"].lower() in position:
+            score += 20
+            
         # Location match (15%)
-        location_score = 0
         candidate_location = extract_location_from_url(str(row.get("URL", "")))
         if candidate_location and criteria["location"].lower() != "not specified":
             location_similarity = fuzz.token_sort_ratio(criteria["location"].lower(), candidate_location.lower())
-            location_score = location_similarity * 0.15
-            if location_similarity < 40:
-                notes.append("Location mismatch")
-        
+            score += (location_similarity * 0.15)
+            
         # Industry match (15%)
-        industry_score = 0
         candidate_company = str(row.get("Company", "")).lower()
         if criteria["industry"].lower() != "not specified":
             industry_similarity = fuzz.token_sort_ratio(criteria["industry"].lower(), candidate_company)
-            industry_score = industry_similarity * 0.15
-            if industry_similarity < 40:
-                notes.append("Industry experience mismatch")
+            score += (industry_similarity * 0.15)
         
-        total_score = round(title_score + seniority_score + location_score + industry_score, 2)
-        
-        return {
-            'total_score': total_score,
-            'breakdown': {
-                'title': round(title_score, 2),
-                'seniority': round(seniority_score, 2),
-                'location': round(location_score, 2),
-                'industry': round(industry_score, 2),
-                'notes': notes
-            }
-        }
+        return round(score, 2)
 
-    # Apply scoring and create a new dataframe with detailed scores
-    scores = connections_df.apply(score_candidate, axis=1)
-    connections_df["match_score"] = scores.apply(lambda x: x['total_score'])
-    connections_df["score_breakdown"] = scores.apply(lambda x: x['breakdown'])
-    
+    connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
     filtered_df = connections_df[connections_df["match_score"] > 20]  # Minimum score threshold
     
-    # Sort by score and select top 5 candidates
+    # Sort by score and select columns for display
     result_df = filtered_df.sort_values(by="match_score", ascending=False).head(5)
+    result_df = result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL"]]
     
-    # Create detailed results with score breakdowns
-    detailed_results = []
-    for _, row in result_df.iterrows():
-        breakdown = row["score_breakdown"]
-        details = {
-            "First Name": row["First Name"],
-            "Last Name": row["Last Name"],
-            "Position": row["Position"],
-            "Company": row["Company"],
-            "Total Score": f"{row['match_score']}%",
-            "Score Breakdown": f"""
-                • Title Match (50%): {breakdown['title']}%
-                • Seniority (20%): {breakdown['seniority']}%
-                • Location (15%): {breakdown['location']}%
-                • Industry (15%): {breakdown['industry']}%
-            """,
-            "Notes": " | ".join(breakdown['notes']) if breakdown['notes'] else "Strong match across criteria",
-            "Profile": f'<a href="{row["URL"]}" target="_blank">View Profile</a>' if row["URL"] else ""
-        }
-        detailed_results.append(details)
-    
-    # Convert to DataFrame for display
-    result_df = pd.DataFrame(detailed_results)
+    # Convert URLs to clickable links
+    result_df = result_df.copy()
+    result_df['URL'] = result_df['URL'].apply(lambda x: f'<a href="{x}" target="_blank">View Profile</a>' if x else "")
     
     return result_df
 
@@ -405,22 +353,7 @@ def main():
                             
                             if not matching_candidates.empty:
                                 st.success(f"Found {len(matching_candidates)} potential candidates!")
-                                
-                                # Display each candidate with detailed score breakdown
-                                for _, candidate in matching_candidates.iterrows():
-                                    with st.expander(f"{candidate['First Name']} {candidate['Last Name']} - Total Score: {candidate['Total Score']}"):
-                                        st.markdown(f"""
-                                        **Current Position:** {candidate['Position']}  
-                                        **Company:** {candidate['Company']}
-                                        
-                                        **Score Breakdown:**  
-                                        {candidate['Score Breakdown']}
-                                        
-                                        **Notes:** {candidate['Notes']}
-                                        
-                                        **Profile:** {candidate['Profile']}
-                                        """, unsafe_allow_html=True)
-                                        st.divider()
+                                st.write(matching_candidates.to_html(escape=False), unsafe_allow_html=True)
                             else:
                                 st.warning("No matching candidates found. Try adjusting the criteria.")
                     else:
