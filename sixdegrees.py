@@ -418,8 +418,8 @@ def main():
                                         
                                         **Notes:** {candidate['Notes']}
                                         
-                                        {candidate['Profile']}
-                                        """)
+                                        **Profile:** {candidate['Profile']}
+                                        """, unsafe_allow_html=True)
                                         st.divider()
                             else:
                                 st.warning("No matching candidates found. Try adjusting the criteria.")
