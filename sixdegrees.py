@@ -220,49 +220,79 @@ def extract_location_from_url(url):
     return None
 
 def match_candidates(connections_df, criteria):
-    """Enhanced candidate matching with updated scoring weights."""
+    """Enhanced candidate matching with updated scoring weights and reasoning."""
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
 
     def score_candidate(row):
         if str(row.get("Company", "")).lower() == criteria["company_name"].lower():
-            return 0  # Exclude current employees
+            return {"score": 0, "reasoning": "Candidate currently works at the hiring company."}
             
         score = 0
         position = str(row.get("Position", "")).lower()
+        reasoning_points = []
         
         # Title match (50%)
         title_similarity = fuzz.token_sort_ratio(criteria["job_title"].lower(), position)
-        score += (title_similarity * 0.5)
+        title_score = title_similarity * 0.5
+        score += title_score
+        if title_similarity > 80:
+            reasoning_points.append(f"Their current role ({row['Position']}) strongly matches the target position ({criteria['job_title']}), contributing {title_score:.1f} points out of 50 possible points")
+        elif title_similarity > 50:
+            reasoning_points.append(f"Their role shows moderate similarity to the target position, adding {title_score:.1f} points")
+        else:
+            reasoning_points.append(f"Their current role has limited similarity to the target position, only contributing {title_score:.1f} points")
         
         # Seniority match (20%)
-        if criteria["seniority"].lower() in position:
-            score += 20
-            
+        seniority_score = 20 if criteria["seniority"].lower() in position else 0
+        score += seniority_score
+        if seniority_score > 0:
+            reasoning_points.append(f"Their seniority level matches perfectly, adding the full 20 points")
+        else:
+            reasoning_points.append(f"Their seniority level differs from the requirement, adding 0 points")
+        
         # Location match (15%)
+        location_score = 0
         candidate_location = extract_location_from_url(str(row.get("URL", "")))
         if candidate_location and criteria["location"].lower() != "not specified":
             location_similarity = fuzz.token_sort_ratio(criteria["location"].lower(), candidate_location.lower())
-            score += (location_similarity * 0.15)
-            
-        # Industry match (15%)
-        candidate_company = str(row.get("Company", "")).lower()
-        if criteria["industry"].lower() != "not specified":
-            industry_similarity = fuzz.token_sort_ratio(criteria["industry"].lower(), candidate_company)
-            score += (industry_similarity * 0.15)
+            location_score = location_similarity * 0.15
+            score += location_score
+            if location_similarity > 80:
+                reasoning_points.append(f"Their location strongly matches the requirement, adding {location_score:.1f} out of 15 possible points")
+            else:
+                reasoning_points.append(f"Their location partially matches, contributing {location_score:.1f} points")
         
-        return round(score, 2)
+        reasoning = " ".join(reasoning_points)
+        return {"score": round(score, 2), "reasoning": reasoning}
 
-    connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
+    # Apply scoring and create result columns
+    scores = connections_df.apply(score_candidate, axis=1)
+    connections_df["match_score"] = scores.apply(lambda x: x["score"])
+    connections_df["score_reasoning"] = scores.apply(lambda x: x["reasoning"])
+    
     filtered_df = connections_df[connections_df["match_score"] > 20]  # Minimum score threshold
     
     # Sort by score and select columns for display
     result_df = filtered_df.sort_values(by="match_score", ascending=False).head(5)
-    result_df = result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL"]]
+    result_df = result_df[["First Name", "Last Name", "Position", "Company", "match_score", "score_reasoning", "URL"]]
     
     # Convert URLs to clickable links
     result_df = result_df.copy()
     result_df['URL'] = result_df['URL'].apply(lambda x: f'<a href="{x}" target="_blank">View Profile</a>' if x else "")
+    
+    # Format the display for each result
+    result_df['match_score'] = result_df.apply(lambda x: f"""
+        <div style='cursor: pointer;' 
+             onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+            {x['match_score']}%
+        </div>
+        <div style='display: none; padding: 10px; background-color: #f8f9fa; border-radius: 5px; margin-top: 5px;'>
+            {x['score_reasoning']}
+        </div>
+    """, axis=1)
+    
+    result_df = result_df.drop('score_reasoning', axis=1)
     
     return result_df
 
