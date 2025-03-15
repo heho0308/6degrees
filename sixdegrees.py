@@ -49,8 +49,7 @@ def extract_linkedin_connections(csv_file):
 # AI-Enhanced Job Description Extraction
 # ---------------------------
 def extract_job_description(url):
-    if not url or not url.startswith("http"):
-        st.error("Invalid URL. Please enter a valid job posting URL starting with http or https.")
+    if not url:
         return None
     """Extract job description from a given URL."""
     headers = {"User-Agent": "Mozilla/5.0"}
