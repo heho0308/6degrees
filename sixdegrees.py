@@ -115,7 +115,7 @@ def match_candidates(connections_df, criteria):
 
     connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
     result_df = connections_df.sort_values(by="match_score", ascending=False).head(5)
-    result_df["warm_introduction"] = result_df.apply(lambda row: f"{row['First Name']} {row['Last Name']} works as a {row['Position']} at {row['Company']}. They might be a great fit for this role. Consider reaching out to a mutual connection for an introduction.", axis=1)
+    result_df["warm_introduction"] = result_df.apply(lambda row: f"Hi [Connection], I hope you're doing well! I'm hiring for a {criteria['job_title']} role at {criteria['company_name']}. {row['First Name']} {row['Last Name']} is currently a {row['Position']} at {row['Company']}. Their experience in {row['Position']} and background in similar roles make them a strong candidate. Would you be open to making an introduction?", axis=1)
     return result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL", "warm_introduction"]]
 
 # ---------------------------
@@ -157,3 +157,4 @@ if uploaded_file:
     if st.button("Find Best Candidates and Suggest Introductions"):
         matches = match_candidates(connections_df, criteria)
         st.write(matches.to_html(escape=False), unsafe_allow_html=True)
+
