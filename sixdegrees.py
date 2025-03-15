@@ -68,19 +68,20 @@ def extract_job_description(url):
 # AI-Enhanced Job Criteria Extraction
 # ---------------------------
 def extract_job_criteria(url):
-    """Extract job title, seniority, industry, and experience requirements using AI."""
+    """Extract job title, seniority, industry, and hiring company using AI."""
     job_desc = extract_job_description(url)
     if not job_desc:
         return None
     
     extracted_entities = nlp_model(job_desc)
     job_title = next((ent['word'] for ent in extracted_entities if "job" in ent['entity'].lower()), "Unknown")
+    hiring_company = next((ent['word'] for ent in extracted_entities if "company" in ent['entity'].lower()), "Unknown")
     
     return {
         "job_title": st.text_input("Job Title", job_title),
         "seniority": st.selectbox("Seniority", ["Entry Level", "Mid-Level", "Senior"], index=1),
         "industry": st.text_input("Industry", "Technology" if "developer" in job_desc.lower() else "General"),
-        "years_experience": st.number_input("Years of Experience", min_value=0, max_value=50, value=int(re.search(r'(\d+) years?', job_desc.lower()).group(1)) if re.search(r'(\d+) years?', job_desc.lower()) else 0)
+        "company_name": st.text_input("Company That Is Hiring", hiring_company)
     }
 
 # ---------------------------
@@ -100,7 +101,7 @@ def match_candidates(connections_df, criteria):
 
     connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
     result_df = connections_df.sort_values(by="match_score", ascending=False).head(5)
-    result_df["warm_introduction"] = result_df["First Name"] + " " + result_df["Last Name"] + " is a potential match. Reach out to their mutual connection for an introduction."
+    result_df["warm_introduction"] = result_df.apply(lambda row: f"{row['First Name']} {row['Last Name']} works as a {row['Position']} at {row['Company']}. They might be a great fit for this role. Consider reaching out to a mutual connection for an introduction.", axis=1)
     return result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL", "warm_introduction"]]
 
 # ---------------------------
@@ -124,14 +125,14 @@ if criteria:
         job_title = st.text_input("Job Title", criteria["job_title"])
         seniority = st.selectbox("Seniority", ["Entry Level", "Mid-Level", "Senior"], index=["Entry Level", "Mid-Level", "Senior"].index(criteria["seniority"]))
         industry = st.text_input("Industry", criteria["industry"])
-        years_experience = st.number_input("Years of Experience", min_value=0, max_value=50, value=criteria["years_experience"])
+        company_name = st.text_input("Company That Is Hiring", criteria["company_name"])
         save_button = st.form_submit_button("Save Criteria")
     
     if save_button:
         criteria["job_title"] = job_title
         criteria["seniority"] = seniority
         criteria["industry"] = industry
-        criteria["years_experience"] = years_experience
+        criteria["company_name"] = company_name
         st.success("✅ Criteria updated successfully!")
 
 uploaded_file = st.file_uploader("📤 Upload LinkedIn Connections (CSV)", type=["csv"])
@@ -142,3 +143,4 @@ if uploaded_file:
     if st.button("Find Best Candidates and Suggest Introductions"):
         matches = match_candidates(connections_df, criteria)
         st.write(matches.to_html(escape=False), unsafe_allow_html=True)
+
