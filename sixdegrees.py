@@ -17,7 +17,7 @@ nltk.download("averaged_perceptron_tagger")
 # Load Hugging Face Model for Job Criteria Extraction
 @st.cache_resource
 def load_nlp_model():
-    return pipeline("ner", model="facebook/bart-base")
+    return pipeline("ner", model="dslim/bert-base-NER")
 
 nlp_model = load_nlp_model()
 
@@ -71,7 +71,7 @@ def extract_job_criteria(url):
         return None
     
     extracted_entities = nlp_model(job_desc)
-    job_title = next((ent['word'] for ent in extracted_entities if ent['entity'] == 'JOB_TITLE'), "Unknown")
+    job_title = next((ent['word'] for ent in extracted_entities if "job" in ent['entity'].lower()), "Unknown")
     
     return {
         "job_title": st.text_input("Job Title", job_title),
@@ -139,5 +139,4 @@ if uploaded_file:
     if st.button("Find Best Candidates and Suggest Introductions"):
         matches = match_candidates(connections_df, criteria)
         st.write(matches.to_html(escape=False), unsafe_allow_html=True)
-
 
