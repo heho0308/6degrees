@@ -104,7 +104,8 @@ def match_candidates(connections_df, criteria):
 # ---------------------------
 # Streamlit App
 # ---------------------------
-st.title("🤖 AI-Powered Warm Introduction Candidate Matcher")
+st.title("6 Degrees")
+st.subheader("Use your human capital in new ways")
 
 st.sidebar.header("📌 How to Download LinkedIn Contacts")
 st.sidebar.markdown("""
@@ -115,13 +116,21 @@ st.sidebar.markdown("""
 """)
 
 job_url = st.text_input("🔗 Enter Job Posting URL")
-if st.button("Extract Job Criteria"):
-    with st.spinner("Analyzing job posting..."):
-        criteria = extract_job_criteria(job_url)
-        if criteria:
-            st.write(criteria)
-        else:
-            st.error("Failed to extract job criteria.")
+criteria = extract_job_criteria(job_url)
+if criteria:
+    with st.form(key='criteria_form'):
+        job_title = st.text_input("Job Title", criteria["job_title"])
+        seniority = st.selectbox("Seniority", ["Entry Level", "Mid-Level", "Senior"], index=["Entry Level", "Mid-Level", "Senior"].index(criteria["seniority"]))
+        industry = st.text_input("Industry", criteria["industry"])
+        years_experience = st.number_input("Years of Experience", min_value=0, max_value=50, value=criteria["years_experience"])
+        save_button = st.form_submit_button("Save Criteria")
+    
+    if save_button:
+        criteria["job_title"] = job_title
+        criteria["seniority"] = seniority
+        criteria["industry"] = industry
+        criteria["years_experience"] = years_experience
+        st.success("✅ Criteria updated successfully!")
 
 uploaded_file = st.file_uploader("📤 Upload LinkedIn Connections (CSV)", type=["csv"])
 if uploaded_file:
