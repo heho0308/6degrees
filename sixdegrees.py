@@ -75,22 +75,22 @@ def extract_job_criteria(url):
     job_title = title_prediction["labels"][0] if title_prediction["scores"][0] > 0.5 else "Unknown"
     
     return {
-        "job_title": job_title,
-        "seniority": "Senior" if "senior" in job_desc.lower() else "Mid-Level",
-        "industry": "Technology" if "developer" in job_desc.lower() else "General",
-        "years_experience": int(re.search(r'(\d+)[\+]?\s+years?', job_desc.lower()).group(1)) if re.search(r'(\d+)[\+]?\s+years?', job_desc.lower()) else 0
+        "job_title": st.text_input("Job Title", job_title),
+        "seniority": st.selectbox("Seniority", ["Entry Level", "Mid-Level", "Senior"], index=1),
+        "industry": st.text_input("Industry", "Technology" if "developer" in job_desc.lower() else "General"),
+        "years_experience": st.number_input("Years of Experience", min_value=0, max_value=50, value=int(re.search(r'()years?', job_desc.lower()).group(1)) if re.search(r'()years?', job_desc.lower()) else 0)
     }
 
 # ---------------------------
 # AI-Enhanced Candidate Matching
 # ---------------------------
 def match_candidates(connections_df, criteria):
-    """Matches candidates based on AI-extracted job criteria."""
+    """Matches candidates based on AI-extracted job criteria and suggests warm introductions."""
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
 
     def score_candidate(row):
-        if str(row.get("Company", "")).lower() == criteria["company_name"].lower():
+        if str(row.get("Company", "")).lower() == criteria.get("company_name", "").lower():
             return 0  # Exclude current employees
         
         score = fuzz.token_sort_ratio(criteria["job_title"].lower(), str(row.get("Position", "")).lower())
@@ -98,12 +98,21 @@ def match_candidates(connections_df, criteria):
 
     connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
     result_df = connections_df.sort_values(by="match_score", ascending=False).head(5)
-    return result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL"]]
+    result_df["warm_introduction"] = result_df["First Name"] + " " + result_df["Last Name"] + " is a potential match. Reach out to their mutual connection for an introduction."
+    return result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL", "warm_introduction"]]
 
 # ---------------------------
 # Streamlit App
 # ---------------------------
-st.title("🤖 AI-Powered Candidate Matcher")
+st.title("🤖 AI-Powered Warm Introduction Candidate Matcher")
+
+st.sidebar.header("📌 How to Download LinkedIn Contacts")
+st.sidebar.markdown("""
+1. Go to [LinkedIn Data Export](https://www.linkedin.com/psettings/member-data)
+2. Select **Connections** and request an archive.
+3. Download the **CSV file** once LinkedIn sends it.
+4. Upload the CSV here for analysis.
+""")
 
 job_url = st.text_input("🔗 Enter Job Posting URL")
 if st.button("Extract Job Criteria"):
@@ -119,3 +128,7 @@ if uploaded_file:
     connections_df = extract_linkedin_connections(uploaded_file)
     st.success("✅ Connections uploaded successfully!")
     st.dataframe(connections_df.head())
+    if st.button("Find Best Candidates and Suggest Introductions"):
+        matches = match_candidates(connections_df, criteria)
+        st.write(matches.to_html(escape=False), unsafe_allow_html=True)
+
