@@ -17,7 +17,7 @@ nltk.download("averaged_perceptron_tagger")
 # Load Hugging Face Model for Job Criteria Extraction
 @st.cache_resource
 def load_nlp_model():
-    return pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
+    return pipeline("ner", model="facebook/bart-base")
 
 nlp_model = load_nlp_model()
 
@@ -70,15 +70,14 @@ def extract_job_criteria(url):
     if not job_desc:
         return None
     
-    labels = ["Software Engineer", "Data Scientist", "Manager", "Director", "Analyst", "Consultant", "Marketing Specialist", "Sales Representative"]
-    title_prediction = nlp_model(job_desc, labels)
-    job_title = title_prediction["labels"][0] if title_prediction["scores"][0] > 0.5 else "Unknown"
+    extracted_entities = nlp_model(job_desc)
+    job_title = next((ent['word'] for ent in extracted_entities if ent['entity'] == 'JOB_TITLE'), "Unknown")
     
     return {
         "job_title": st.text_input("Job Title", job_title),
         "seniority": st.selectbox("Seniority", ["Entry Level", "Mid-Level", "Senior"], index=1),
         "industry": st.text_input("Industry", "Technology" if "developer" in job_desc.lower() else "General"),
-        "years_experience": st.number_input("Years of Experience", min_value=0, max_value=50, value=int(re.search(r'()years?', job_desc.lower()).group(1)) if re.search(r'()years?', job_desc.lower()) else 0)
+        "years_experience": st.number_input("Years of Experience", min_value=0, max_value=50, value=int(re.search(r'(\d+) years?', job_desc.lower()).group(1)) if re.search(r'(\d+) years?', job_desc.lower()) else 0)
     }
 
 # ---------------------------
@@ -140,4 +139,5 @@ if uploaded_file:
     if st.button("Find Best Candidates and Suggest Introductions"):
         matches = match_candidates(connections_df, criteria)
         st.write(matches.to_html(escape=False), unsafe_allow_html=True)
+
 
