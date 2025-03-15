@@ -96,7 +96,22 @@ def match_candidates(connections_df, criteria):
         if str(row.get("Company", "")).lower() == criteria.get("company_name", "").lower():
             return 0  # Exclude current employees
         
-        score = fuzz.token_sort_ratio(criteria["job_title"].lower(), str(row.get("Position", "")).lower())
+        score = 0
+        position = str(row.get("Position", "")).lower()
+        industry = str(row.get("Company", "")).lower()
+        
+        # Job Title Match (50% weight)
+        title_similarity = fuzz.token_sort_ratio(criteria["job_title"].lower(), position)
+        score += (title_similarity * 0.5)
+        
+        # Seniority Match (20% weight)
+        if criteria["seniority"].lower() in position:
+            score += 20
+        
+        # Industry Match (15% weight)
+        if criteria["industry"].lower() in industry:
+            score += 15
+        
         return round(score, 2)
 
     connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
@@ -143,4 +158,3 @@ if uploaded_file:
     if st.button("Find Best Candidates and Suggest Introductions"):
         matches = match_candidates(connections_df, criteria)
         st.write(matches.to_html(escape=False), unsafe_allow_html=True)
-
