@@ -69,6 +69,10 @@ def clean_csv_data(df):
     df = df[required_columns]
     return df.drop_duplicates()
 
+def match_candidates(connections_df, job_criteria):
+    """Placeholder for candidate matching function."""
+    return connections_df.head(5)  # Placeholder logic
+
 def main():
     st.set_page_config(page_title="6 Degrees", layout="wide")
     st.title("6 Degrees")
@@ -91,15 +95,18 @@ def main():
                 st.session_state.job_criteria = job_criteria
                 st.success("✅ Job criteria extracted successfully!")
     
-    if "job_criteria" in st.session_state:
-        job_criteria = st.session_state.job_criteria
-        st.header("✏️ Step 2: Edit & Save Job Criteria (Optional)")
-        job_criteria["job_title"] = st.text_input("Job Title", job_criteria["job_title"])
-        job_criteria["industry"] = st.text_input("Industry", job_criteria["industry"])
-        job_criteria["years_experience"] = st.text_input("Years of Experience", job_criteria["years_experience"])
-        if st.button("Save Criteria"):
-            st.session_state.job_criteria = job_criteria
-            st.success("✅ Job criteria saved successfully!")
+    st.header("✏️ Step 2: Edit & Save Job Criteria")
+    job_criteria = st.session_state.get("job_criteria", {
+        "job_title": "",
+        "industry": "",
+        "years_experience": ""
+    })
+    job_criteria["job_title"] = st.text_input("Job Title", job_criteria["job_title"])
+    job_criteria["industry"] = st.text_input("Industry", job_criteria["industry"])
+    job_criteria["years_experience"] = st.text_input("Years of Experience", job_criteria["years_experience"])
+    if st.button("Save Criteria"):
+        st.session_state.job_criteria = job_criteria
+        st.success("✅ Job criteria saved successfully!")
     
     st.header("📤 Step 3: Upload LinkedIn Connections CSV")
     uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
