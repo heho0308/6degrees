@@ -54,7 +54,12 @@ def extract_job_criteria(url):
     skills = extract_skills_from_text(job_desc)
     return {
         "job_description": job_desc,
-        "extracted_skills": skills
+        "extracted_skills": skills,
+        "job_title": "",
+        "seniority": "",
+        "industry": "",
+        "location": "",
+        "years_experience": ""
     }
 
 def score_candidate(row, job_criteria):
@@ -79,7 +84,7 @@ def match_candidates(connections_df, job_criteria):
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
     connections_df["match_score"] = connections_df.apply(lambda row: score_candidate(row, job_criteria), axis=1)
-    filtered_df = connections_df[connections_df["match_score"] > 30]  # Threshold to filter candidates
+    filtered_df = connections_df[connections_df["match_score"] > 30]
     top_candidates = filtered_df.sort_values(by="match_score", ascending=False).head(5)
     top_candidates["LinkedIn Profile"] = top_candidates["URL"].apply(lambda x: f'<a href="{x}" target="_blank">View Profile</a>' if x else "")
     return top_candidates
@@ -88,37 +93,52 @@ def main():
     st.set_page_config(page_title="Smart Candidate Matcher with AI", layout="wide")
     st.title("🎯 Smart Candidate Matcher with AI")
     
-    st.sidebar.title("User Panel")
-    role = st.sidebar.selectbox("Select Role", ["Employee", "Recruiter"])
-    username = st.sidebar.text_input("Enter your username", value="user1")
-    st.sidebar.write(f"Logged in as: **{username}** ({role})")
+    with st.sidebar:
+        st.header("📌 Steps to Download LinkedIn Connections")
+        st.write("1. Go to LinkedIn Settings.")
+        st.write("2. Click on 'Get a copy of your data'.")
+        st.write("3. Select 'Connections' and request archive.")
+        st.write("4. Download the CSV file and upload it below.")
     
-    if role == "Recruiter":
-        st.header("🔍 Extract Job Criteria & Find Candidates")
-        job_url = st.text_input("🔗 Paste Job Posting URL")
-        
-        if st.button("Extract Job Criteria & Find Matches"):
-            if job_url:
-                with st.spinner("Analyzing job posting..."):
-                    job_criteria = extract_job_criteria(job_url)
-                    if job_criteria:
-                        st.success("✅ Job criteria extracted successfully!")
-                        st.write("**Extracted Skills:**", ", ".join(job_criteria["extracted_skills"]))
-                        st.text_area("📜 Job Description:", job_criteria["job_description"], height=200)
-                        
-                        if "connections_df" in st.session_state:
-                            candidates = match_candidates(st.session_state.connections_df, job_criteria)
-                            if not candidates.empty:
-                                st.success(f"Found {len(candidates)} potential candidates!")
-                                st.write(candidates.to_html(escape=False), unsafe_allow_html=True)
-                            else:
-                                st.warning("No matching candidates found. Try adjusting the criteria.")
-                    else:
-                        st.error("❌ Failed to extract job criteria. Please check the URL.")
+    st.header("🔍 Step 1: Upload Job Description URL")
+    job_url = st.text_input("🔗 Paste Job Posting URL")
+    
+    if st.button("Extract Job Criteria"):
+        if job_url:
+            with st.spinner("Analyzing job posting..."):
+                job_criteria = extract_job_criteria(job_url)
+                if job_criteria:
+                    st.session_state.job_criteria = job_criteria
+                    st.success("✅ Job criteria extracted successfully!")
+    
+    if "job_criteria" in st.session_state:
+        job_criteria = st.session_state.job_criteria
+        st.header("✏️ Step 2: Edit & Save Job Criteria")
+        job_criteria["job_title"] = st.text_input("Job Title", job_criteria["job_title"])
+        job_criteria["seniority"] = st.text_input("Seniority", job_criteria["seniority"])
+        job_criteria["industry"] = st.text_input("Industry", job_criteria["industry"])
+        job_criteria["location"] = st.text_input("Location", job_criteria["location"])
+        job_criteria["years_experience"] = st.text_input("Years of Experience", job_criteria["years_experience"])
+        st.session_state.job_criteria = job_criteria
+    
+    st.header("📤 Step 3: Upload LinkedIn Connections CSV")
+    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+    if uploaded_file:
+        connections_df = pd.read_csv(uploaded_file)
+        st.session_state.connections_df = connections_df
+        st.success("✅ Connections uploaded successfully!")
+    
+    if "connections_df" in st.session_state and "job_criteria" in st.session_state:
+        st.header("🎯 Step 4: Match Candidates")
+        if st.button("Find Matches"):
+            candidates = match_candidates(st.session_state.connections_df, st.session_state.job_criteria)
+            if not candidates.empty:
+                st.success(f"Found {len(candidates)} potential candidates!")
+                st.write(candidates.to_html(escape=False), unsafe_allow_html=True)
+            else:
+                st.warning("No matching candidates found. Try adjusting the criteria.")
 
 if __name__ == "__main__":
     main()
-
-
 
 
