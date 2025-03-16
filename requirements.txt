@@ -2,8 +2,9 @@ streamlit
 pandas
 requests
 beautifulsoup4
+nltk
 fuzzywuzzy
+python-Levenshtein
 transformers
 torch
-sentence-transformers
 
