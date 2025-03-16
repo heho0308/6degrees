@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from fuzzywuzzy import fuzz
 from transformers import pipeline
 from sentence_transformers import SentenceTransformer, util
-import spacy
+
 import nltk
 from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.corpus import stopwords
@@ -29,12 +29,7 @@ def load_embedding_model():
 def load_text_generator():
     return pipeline("text-generation", model="t5-small")
 
-@st.cache_resource
-def load_spacy_model():
-    try:
-        return spacy.load("en_core_web_sm")
-    except OSError:
-        return None  # Skip if spaCy model isn't available
+
     except OSError:
         st.error("Failed to load spaCy language model. Try running: python -m spacy download en_core_web_sm")
         return None
@@ -55,10 +50,7 @@ def get_text_generator():
         st.session_state.text_generator = load_text_generator()
     return st.session_state.text_generator
 
-def get_spacy_model():
-    if 'nlp_spacy' not in st.session_state:
-        st.session_state.nlp_spacy = load_spacy_model()
-    return st.session_state.nlp_spacy
+
 
 # ---------------------------
 # Helper Functions
@@ -116,8 +108,9 @@ def extract_job_criteria(url):
     job_titles = [ent['word'] for ent in extracted_entities if "JOB" in ent['entity']]
     hiring_companies = [ent['word'] for ent in extracted_entities if "ORG" in ent['entity']]
     
-    doc = nlp_spacy(job_desc)
-    skills = [chunk.text for chunk in doc.noun_chunks if "experience" in chunk.text.lower() or "skills" in chunk.text.lower()]
+    tokens = word_tokenize(job_desc)
+    tagged_words = nltk.pos_tag(tokens)
+    skills = [word for word, tag in tagged_words if tag in ['NN', 'NNS'] and word.lower() not in stopwords.words('english')]
     
     return {
         "job_title": st.text_input("Job Title", job_titles[0] if job_titles else "Unknown"),
@@ -157,3 +150,4 @@ def match_candidates(connections_df, criteria):
 
     result_df["warm_introduction"] = result_df.apply(generate_intro, axis=1)
     return result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL", "warm_introduction"]]
+
