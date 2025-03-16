@@ -6,4 +6,3 @@ fuzzywuzzy
 transformers
 torch
 sentence-transformers
-nltk
