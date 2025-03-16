@@ -32,11 +32,12 @@ def load_text_generator():
 @st.cache_resource
 def load_spacy_model():
     try:
+        import spacy.cli
+        spacy.cli.download("en_core_web_sm")
         return spacy.load("en_core_web_sm")
     except OSError:
-        import subprocess
-        subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-        return spacy.load("en_core_web_sm")
+        st.error("Failed to load spaCy language model. Try running: python -m spacy download en_core_web_sm")
+        return None
 
 nlp_model = load_nlp_model()
 embedder = load_embedding_model()
@@ -137,6 +138,4 @@ def match_candidates(connections_df, criteria):
 
     result_df["warm_introduction"] = result_df.apply(generate_intro, axis=1)
     return result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL", "warm_introduction"]]
-
-
 
