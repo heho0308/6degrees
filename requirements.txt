@@ -5,4 +5,5 @@ beautifulsoup4
 fuzzywuzzy
 transformers
 torch
+sentence-transformers
 nltk
