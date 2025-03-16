@@ -7,5 +7,3 @@ transformers
 torch
 sentence-transformers
 nltk
-spacy
-
