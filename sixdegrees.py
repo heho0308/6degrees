@@ -19,7 +19,7 @@ nltk.download("averaged_perceptron_tagger")
 # Load AI Models
 @st.cache_resource
 def load_nlp_model():
-    return pipeline("ner", model="dslim/bert-base-NER")  # Faster model
+    return pipeline("ner", model="dbmdz/bert-large-cased-finetuned-conll03-english")  # Faster model
 
 @st.cache_resource
 def load_embedding_model():
@@ -27,7 +27,7 @@ def load_embedding_model():
 
 @st.cache_resource
 def load_text_generator():
-    return pipeline("text-generation", model="t5-small")
+    return pipeline("text-generation", model="facebook/bart-base")
 
 
 
@@ -108,7 +108,9 @@ def extract_job_criteria(url):
     
     tokens = word_tokenize(job_desc)
     tagged_words = nltk.pos_tag(tokens)
-    skills = [word for word, tag in tagged_words if tag in ['NN', 'NNS'] and word.lower() not in stopwords.words('english')]
+    nltk.download('stopwords')
+    stop_words = set(stopwords.words('english'))
+    skills = [word for word, tag in tagged_words if tag in ['NN', 'NNS'] and word.lower() not in stop_words]
     
     return {
         "job_title": st.text_input("Job Title", job_titles[0] if job_titles else "Unknown"),
@@ -148,5 +150,6 @@ def match_candidates(connections_df, criteria):
 
     result_df["warm_introduction"] = result_df.apply(generate_intro, axis=1)
     return result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL", "warm_introduction"]]
+
 
 
