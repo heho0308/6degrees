@@ -30,9 +30,7 @@ def load_text_generator():
     return pipeline("text-generation", model="t5-small")
 
 
-    except OSError:
-        st.error("Failed to load spaCy language model. Try running: python -m spacy download en_core_web_sm")
-        return None
+
 
 # Load models dynamically only when needed
 def get_nlp_model():
@@ -150,4 +148,5 @@ def match_candidates(connections_df, criteria):
 
     result_df["warm_introduction"] = result_df.apply(generate_intro, axis=1)
     return result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL", "warm_introduction"]]
+
 
