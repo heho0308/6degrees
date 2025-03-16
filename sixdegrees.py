@@ -19,7 +19,7 @@ nltk.download("averaged_perceptron_tagger")
 # Load AI Models
 @st.cache_resource
 def load_nlp_model():
-    return pipeline("ner", model="dbmdz/bert-large-cased-finetuned-conll03-english")  # Faster model
+    return pipeline("ner", model="dslim/bert-base-NER")  # Smaller, faster model  # Faster model
 
 @st.cache_resource
 def load_embedding_model():
@@ -27,7 +27,7 @@ def load_embedding_model():
 
 @st.cache_resource
 def load_text_generator():
-    return pipeline("text-generation", model="facebook/bart-base")
+    return pipeline("text-generation", model="t5-small")  # Smaller, faster model
 
 
 
@@ -108,8 +108,12 @@ def extract_job_criteria(url):
     
     tokens = word_tokenize(job_desc)
     tagged_words = nltk.pos_tag(tokens)
-    nltk.download('stopwords')
-    stop_words = set(stopwords.words('english'))
+    @st.cache_resource
+def load_nltk_resources():
+    nltk.download("stopwords")
+    return set(stopwords.words("english"))
+
+stop_words = load_nltk_resources()
     skills = [word for word, tag in tagged_words if tag in ['NN', 'NNS'] and word.lower() not in stop_words]
     
     return {
