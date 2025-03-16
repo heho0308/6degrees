@@ -56,9 +56,7 @@ def extract_job_criteria(url):
         "job_description": job_desc,
         "extracted_skills": skills,
         "job_title": "",
-        "seniority": "",
         "industry": "",
-        "location": "",
         "years_experience": ""
     }
 
@@ -97,9 +95,7 @@ def main():
         job_criteria = st.session_state.job_criteria
         st.header("✏️ Step 2: Edit & Save Job Criteria (Optional)")
         job_criteria["job_title"] = st.text_input("Job Title", job_criteria["job_title"])
-        job_criteria["seniority"] = st.text_input("Seniority", job_criteria["seniority"])
         job_criteria["industry"] = st.text_input("Industry", job_criteria["industry"])
-        job_criteria["location"] = st.text_input("Location", job_criteria["location"])
         job_criteria["years_experience"] = st.text_input("Years of Experience", job_criteria["years_experience"])
         if st.button("Save Criteria"):
             st.session_state.job_criteria = job_criteria
