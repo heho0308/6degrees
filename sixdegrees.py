@@ -5,6 +5,7 @@ import requests
 from bs4 import BeautifulSoup
 from fuzzywuzzy import fuzz
 from transformers import pipeline
+from sentence_transformers import SentenceTransformer, util
 import nltk
 from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.corpus import stopwords
@@ -14,12 +15,22 @@ nltk.download("punkt")
 nltk.download("stopwords")
 nltk.download("averaged_perceptron_tagger")
 
-# Load Hugging Face Model for Job Criteria Extraction
+# Load AI Models
 @st.cache_resource
 def load_nlp_model():
     return pipeline("ner", model="dslim/bert-base-NER")
 
+@st.cache_resource
+def load_embedding_model():
+    return SentenceTransformer("all-MiniLM-L6-v2")
+
+@st.cache_resource
+def load_text_generator():
+    return pipeline("text-generation", model="t5-small")
+
 nlp_model = load_nlp_model()
+embedder = load_embedding_model()
+text_generator = load_text_generator()
 
 # ---------------------------
 # Helper Functions
@@ -73,8 +84,8 @@ def extract_job_criteria(url):
         return None
     
     extracted_entities = nlp_model(job_desc)
-    job_title = next((ent['word'] for ent in extracted_entities if "job" in ent['entity'].lower()), "Unknown")
-    hiring_company = next((ent['word'] for ent in extracted_entities if "company" in ent['entity'].lower()), "Unknown")
+    job_title = next((ent['word'] for ent in extracted_entities if "JOB" in ent['entity']), "Unknown")
+    hiring_company = next((ent['word'] for ent in extracted_entities if "ORG" in ent['entity']), "Unknown")
     
     return {
         "job_title": st.text_input("Job Title", job_title),
@@ -91,31 +102,26 @@ def match_candidates(connections_df, criteria):
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
 
+    job_embedding = embedder.encode(criteria["job_title"], convert_to_tensor=True)
+    
     def score_candidate(row):
         if str(row.get("Company", "")).lower() == criteria.get("company_name", "").lower():
             return 0  # Exclude current employees
         
-        score = 0
         position = str(row.get("Position", "")).lower()
-        industry = str(row.get("Company", "")).lower()
-        
-        # Job Title Match (50% weight)
-        title_similarity = fuzz.token_sort_ratio(criteria["job_title"].lower(), position)
-        score += (title_similarity * 0.5)
-        
-        # Seniority Match (20% weight)
-        if criteria["seniority"].lower() in position:
-            score += 20
-        
-        # Industry Match (15% weight)
-        if criteria["industry"].lower() in industry:
-            score += 15
-        
-        return round(score, 2)
+        candidate_embedding = embedder.encode(position, convert_to_tensor=True)
+        similarity = util.pytorch_cos_sim(job_embedding, candidate_embedding).item()
+        return round(similarity * 100, 2)
 
     connections_df["match_score"] = connections_df.apply(score_candidate, axis=1)
     result_df = connections_df.sort_values(by="match_score", ascending=False).head(5)
-    result_df["warm_introduction"] = result_df.apply(lambda row: f"Hi [Connection], I hope you're doing well! I'm hiring for a {criteria['job_title']} role at {criteria['company_name']}. {row['First Name']} {row['Last Name']} is currently a {row['Position']} at {row['Company']}. Their experience in {row['Position']} and background in similar roles make them a strong candidate. Would you be open to making an introduction?", axis=1)
+    
+    def generate_intro(row):
+        prompt = f"Generate a warm introduction for {row['First Name']} {row['Last Name']} for a {criteria['job_title']} role at {criteria['company_name']}. Their background as a {row['Position']} at {row['Company']} makes them a great fit."
+        response = text_generator(prompt, max_length=100)
+        return response[0]["generated_text"]
+
+    result_df["warm_introduction"] = result_df.apply(generate_intro, axis=1)
     return result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL", "warm_introduction"]]
 
 # ---------------------------
@@ -157,4 +163,3 @@ if uploaded_file:
     if st.button("Find Best Candidates and Suggest Introductions"):
         matches = match_candidates(connections_df, criteria)
         st.write(matches.to_html(escape=False), unsafe_allow_html=True)
-
