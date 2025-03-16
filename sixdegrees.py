@@ -31,7 +31,12 @@ def load_text_generator():
 
 @st.cache_resource
 def load_spacy_model():
-    return spacy.load("en_core_web_sm")
+    try:
+        return spacy.load("en_core_web_sm")
+    except OSError:
+        import subprocess
+        subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+        return spacy.load("en_core_web_sm")
 
 nlp_model = load_nlp_model()
 embedder = load_embedding_model()
@@ -132,5 +137,6 @@ def match_candidates(connections_df, criteria):
 
     result_df["warm_introduction"] = result_df.apply(generate_intro, axis=1)
     return result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL", "warm_introduction"]]
+
 
 
