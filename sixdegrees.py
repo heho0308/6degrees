@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from fuzzywuzzy import fuzz
 from transformers import pipeline
 from sentence_transformers import SentenceTransformer, util
+import spacy
 import nltk
 from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.corpus import stopwords
@@ -18,7 +19,7 @@ nltk.download("averaged_perceptron_tagger")
 # Load AI Models
 @st.cache_resource
 def load_nlp_model():
-    return pipeline("ner", model="dslim/bert-base-NER")
+    return pipeline("ner", model="dbmdz/bert-large-cased-finetuned-conll03-english")
 
 @st.cache_resource
 def load_embedding_model():
@@ -28,9 +29,14 @@ def load_embedding_model():
 def load_text_generator():
     return pipeline("text-generation", model="t5-small")
 
+@st.cache_resource
+def load_spacy_model():
+    return spacy.load("en_core_web_sm")
+
 nlp_model = load_nlp_model()
 embedder = load_embedding_model()
 text_generator = load_text_generator()
+nlp_spacy = load_spacy_model()
 
 # ---------------------------
 # Helper Functions
@@ -78,20 +84,23 @@ def extract_job_description(url):
 # AI-Enhanced Job Criteria Extraction
 # ---------------------------
 def extract_job_criteria(url):
-    """Extract job title, seniority, industry, and hiring company using AI."""
+    """Extract job title, hiring company, industry, and skills using AI."""
     job_desc = extract_job_description(url)
     if not job_desc:
         return None
     
     extracted_entities = nlp_model(job_desc)
-    job_title = next((ent['word'] for ent in extracted_entities if "JOB" in ent['entity']), "Unknown")
-    hiring_company = next((ent['word'] for ent in extracted_entities if "ORG" in ent['entity']), "Unknown")
+    job_titles = [ent['word'] for ent in extracted_entities if "JOB" in ent['entity']]
+    hiring_companies = [ent['word'] for ent in extracted_entities if "ORG" in ent['entity']]
+    
+    doc = nlp_spacy(job_desc)
+    skills = [chunk.text for chunk in doc.noun_chunks if "experience" in chunk.text.lower() or "skills" in chunk.text.lower()]
     
     return {
-        "job_title": st.text_input("Job Title", job_title),
-        "seniority": st.selectbox("Seniority", ["Entry Level", "Mid-Level", "Senior"], index=1),
+        "job_title": st.text_input("Job Title", job_titles[0] if job_titles else "Unknown"),
+        "company_name": st.text_input("Company That Is Hiring", hiring_companies[0] if hiring_companies else "Unknown"),
         "industry": st.text_input("Industry", "Technology" if "developer" in job_desc.lower() else "General"),
-        "company_name": st.text_input("Company That Is Hiring", hiring_company)
+        "skills": st.text_area("Key Skills & Experience", ", ".join(skills) if skills else "Not Found")
     }
 
 # ---------------------------
@@ -124,42 +133,4 @@ def match_candidates(connections_df, criteria):
     result_df["warm_introduction"] = result_df.apply(generate_intro, axis=1)
     return result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL", "warm_introduction"]]
 
-# ---------------------------
-# Streamlit App
-# ---------------------------
-st.title("6 Degrees")
-st.subheader("Use your human capital in new ways")
 
-st.sidebar.header("📌 How to Download LinkedIn Contacts")
-st.sidebar.markdown("""
-1. Go to [LinkedIn Data Export](https://www.linkedin.com/psettings/member-data)
-2. Select **Connections** and request an archive.
-3. Download the **CSV file** once LinkedIn sends it.
-4. Upload the CSV here for analysis.
-""")
-
-job_url = st.text_input("🔗 Enter Job Posting URL")
-criteria = extract_job_criteria(job_url)
-if criteria:
-    with st.form(key='criteria_form'):
-        job_title = st.text_input("Job Title", criteria["job_title"])
-        seniority = st.selectbox("Seniority", ["Entry Level", "Mid-Level", "Senior"], index=["Entry Level", "Mid-Level", "Senior"].index(criteria["seniority"]))
-        industry = st.text_input("Industry", criteria["industry"])
-        company_name = st.text_input("Company That Is Hiring", criteria["company_name"])
-        save_button = st.form_submit_button("Save Criteria")
-    
-    if save_button:
-        criteria["job_title"] = job_title
-        criteria["seniority"] = seniority
-        criteria["industry"] = industry
-        criteria["company_name"] = company_name
-        st.success("✅ Criteria updated successfully!")
-
-uploaded_file = st.file_uploader("📤 Upload LinkedIn Connections (CSV)", type=["csv"])
-if uploaded_file:
-    connections_df = extract_linkedin_connections(uploaded_file)
-    st.success("✅ Connections uploaded successfully!")
-    st.dataframe(connections_df.head())
-    if st.button("Find Best Candidates and Suggest Introductions"):
-        matches = match_candidates(connections_df, criteria)
-        st.write(matches.to_html(escape=False), unsafe_allow_html=True)
