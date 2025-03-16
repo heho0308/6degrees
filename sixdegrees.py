@@ -124,9 +124,12 @@ def main():
     st.header("📤 Step 3: Upload LinkedIn Connections CSV")
     uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
     if uploaded_file:
-        connections_df = pd.read_csv(uploaded_file)
-        st.session_state.connections_df = connections_df
-        st.success("✅ Connections uploaded successfully!")
+        try:
+            connections_df = pd.read_csv(uploaded_file, encoding='utf-8', on_bad_lines='skip')
+            st.session_state.connections_df = connections_df
+            st.success("✅ Connections uploaded successfully!")
+        except pd.errors.ParserError:
+            st.error("❌ Error reading the CSV file. Please check its formatting and try again.")
     
     if "connections_df" in st.session_state and "job_criteria" in st.session_state:
         st.header("🎯 Step 4: Match Candidates")
@@ -140,5 +143,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
