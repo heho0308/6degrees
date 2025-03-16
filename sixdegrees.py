@@ -7,14 +7,10 @@ from fuzzywuzzy import fuzz
 from transformers import pipeline
 from sentence_transformers import SentenceTransformer, util
 
-from transformers import pipeline
-
-
-
 # Load AI Models
 @st.cache_resource
 def load_nlp_model():
-    return pipeline("ner", model="dslim/bert-base-NER")  # Smaller, faster model  # Faster model
+    return pipeline("ner", model="dslim/bert-base-NER")  # Smaller, faster model
 
 @st.cache_resource
 def load_embedding_model():
@@ -24,8 +20,9 @@ def load_embedding_model():
 def load_text_generator():
     return pipeline("text-generation", model="t5-small")  # Smaller, faster model
 
-
-
+@st.cache_resource
+def load_skill_extraction_model():
+    return pipeline("token-classification", model="dslim/bert-base-NER")  # Faster skill extraction model
 
 # Load models dynamically only when needed
 def get_nlp_model():
@@ -43,7 +40,10 @@ def get_text_generator():
         st.session_state.text_generator = load_text_generator()
     return st.session_state.text_generator
 
-
+def get_skill_extraction_model():
+    if 'skill_extraction' not in st.session_state:
+        st.session_state.skill_extraction = load_skill_extraction_model()
+    return st.session_state.skill_extraction
 
 # ---------------------------
 # Helper Functions
@@ -90,6 +90,12 @@ def extract_job_description(url):
 # ---------------------------
 # AI-Enhanced Job Criteria Extraction
 # ---------------------------
+def extract_skills_from_text(job_desc):
+    model = get_skill_extraction_model()
+    extracted_entities = model(job_desc)
+    skills = [ent['word'] for ent in extracted_entities if ent['entity'] == "MISC"]  # Adjust entity type if needed
+    return ", ".join(skills) if skills else "Not Found"
+
 def extract_job_criteria(url):
     """Extract job title, hiring company, industry, and skills using AI."""
     job_desc = extract_job_description(url)
@@ -101,23 +107,13 @@ def extract_job_criteria(url):
     job_titles = [ent['word'] for ent in extracted_entities if "JOB" in ent['entity']]
     hiring_companies = [ent['word'] for ent in extracted_entities if "ORG" in ent['entity']]
     
-    @st.cache_resource
-def load_skill_extraction_model():
-    return pipeline("token-classification", model="dslim/bert-base-NER")  # Faster skill extraction model
-
-def extract_skills_from_text(job_desc):
-    model = load_skill_extraction_model()
-    extracted_entities = model(job_desc)
-    skills = [ent['word'] for ent in extracted_entities if ent['entity'] == "MISC"]  # Adjust entity type if needed
-    return ", ".join(skills) if skills else "Not Found"
-
-skills = extract_skills_from_text(job_desc)
+    skills = extract_skills_from_text(job_desc)
     
     return {
         "job_title": st.text_input("Job Title", job_titles[0] if job_titles else "Unknown"),
         "company_name": st.text_input("Company That Is Hiring", hiring_companies[0] if hiring_companies else "Unknown"),
         "industry": st.text_input("Industry", "Technology" if "developer" in job_desc.lower() else "General"),
-        "skills": st.text_area("Key Skills & Experience", ", ".join(skills) if skills else "Not Found")
+        "skills": st.text_area("Key Skills & Experience", skills if skills else "Not Found")
     }
 
 # ---------------------------
@@ -151,6 +147,7 @@ def match_candidates(connections_df, criteria):
 
     result_df["warm_introduction"] = result_df.apply(generate_intro, axis=1)
     return result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL", "warm_introduction"]]
+
 
 
 
