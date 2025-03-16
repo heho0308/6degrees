@@ -8,6 +8,7 @@ from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.corpus import stopwords
 from fuzzywuzzy import fuzz
 from transformers import pipeline  # Hugging Face NLP model
+import matplotlib.pyplot as plt
 
 # Download required NLTK resources
 nltk.download("punkt")
@@ -40,24 +41,28 @@ def extract_job_description(url):
         st.error(f"Failed to fetch job description: {e}")
         return None
 
-def extract_skills_from_text(text):
-    """Extract key skills from text using NLP."""
+def extract_job_details(text):
+    """Extract job title and company from job description using NLP."""
+    job_title = ""
+    company_name = ""
     entities = nlp(text)
-    skills = list(set(entity['word'] for entity in entities if entity['entity'].startswith('B-')))
-    return skills
+    for entity in entities:
+        if "JOB" in entity['entity']:  # Placeholder condition, update based on model output
+            job_title = entity['word']
+        if "ORG" in entity['entity']:  # Placeholder condition, update based on model output
+            company_name = entity['word']
+    return job_title, company_name
 
 def extract_job_criteria(url):
-    """Extract job criteria including skills from a job posting."""
+    """Extract job criteria including job title and company name from job posting."""
     job_desc = extract_job_description(url)
     if not job_desc:
         return None
-    skills = extract_skills_from_text(job_desc)
+    job_title, company_name = extract_job_details(job_desc)
     return {
         "job_description": job_desc,
-        "extracted_skills": skills,
-        "job_title": "",
-        "industry": "",
-        "years_experience": ""
+        "job_title": job_title,
+        "company_hiring": company_name
     }
 
 def clean_csv_data(df):
@@ -69,9 +74,15 @@ def clean_csv_data(df):
     df = df[required_columns]
     return df.drop_duplicates()
 
+def generate_blurb(candidate, job_criteria):
+    """Generate a warm introduction blurb for the recruiter."""
+    return f"Hi [Colleague's Name], I’m looking to hire for a {job_criteria['job_title']} role at {job_criteria['company_hiring']}. {candidate['First Name']} {candidate['Last Name']} seems like a great fit based on their experience at {candidate['Company']}. Would you be open to making an introduction?"
+
 def match_candidates(connections_df, job_criteria):
-    """Placeholder for candidate matching function."""
-    return connections_df.head(5)  # Placeholder logic
+    """Find and rank top 5 candidates based on job criteria."""
+    top_candidates = connections_df.head(5)  # Placeholder logic
+    top_candidates["Blurb"] = top_candidates.apply(lambda row: generate_blurb(row, job_criteria), axis=1)
+    return top_candidates
 
 def main():
     st.set_page_config(page_title="6 Degrees", layout="wide")
@@ -98,12 +109,10 @@ def main():
     st.header("✏️ Step 2: Edit & Save Job Criteria")
     job_criteria = st.session_state.get("job_criteria", {
         "job_title": "",
-        "industry": "",
-        "years_experience": ""
+        "company_hiring": ""
     })
     job_criteria["job_title"] = st.text_input("Job Title", job_criteria["job_title"])
-    job_criteria["industry"] = st.text_input("Industry", job_criteria["industry"])
-    job_criteria["years_experience"] = st.text_input("Years of Experience", job_criteria["years_experience"])
+    job_criteria["company_hiring"] = st.text_input("Company That Is Hiring", job_criteria["company_hiring"])
     if st.button("Save Criteria"):
         st.session_state.job_criteria = job_criteria
         st.success("✅ Job criteria saved successfully!")
@@ -116,6 +125,7 @@ def main():
             connections_df = clean_csv_data(connections_df)
             st.session_state.connections_df = connections_df
             st.success("✅ Connections uploaded and formatted successfully!")
+            st.write(connections_df.head(5))
         except pd.errors.ParserError:
             st.error("❌ Error reading the CSV file. Please check its formatting and try again.")
     
