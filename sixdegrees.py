@@ -7,14 +7,9 @@ from fuzzywuzzy import fuzz
 from transformers import pipeline
 from sentence_transformers import SentenceTransformer, util
 
-import nltk
-from nltk.tokenize import word_tokenize, sent_tokenize
-from nltk.corpus import stopwords
+from transformers import pipeline
 
-# Download required NLTK resources
-nltk.download("punkt")
-nltk.download("stopwords")
-nltk.download("averaged_perceptron_tagger")
+
 
 # Load AI Models
 @st.cache_resource
@@ -106,15 +101,17 @@ def extract_job_criteria(url):
     job_titles = [ent['word'] for ent in extracted_entities if "JOB" in ent['entity']]
     hiring_companies = [ent['word'] for ent in extracted_entities if "ORG" in ent['entity']]
     
-    tokens = word_tokenize(job_desc)
-    tagged_words = nltk.pos_tag(tokens)
     @st.cache_resource
-def load_nltk_resources():
-    nltk.download("stopwords")
-    return set(stopwords.words("english"))
+def load_skill_extraction_model():
+    return pipeline("token-classification", model="dslim/bert-base-NER")  # Faster skill extraction model
 
-stop_words = load_nltk_resources()
-    skills = [word for word, tag in tagged_words if tag in ['NN', 'NNS'] and word.lower() not in stop_words]
+def extract_skills_from_text(job_desc):
+    model = load_skill_extraction_model()
+    extracted_entities = model(job_desc)
+    skills = [ent['word'] for ent in extracted_entities if ent['entity'] == "MISC"]  # Adjust entity type if needed
+    return ", ".join(skills) if skills else "Not Found"
+
+skills = extract_skills_from_text(job_desc)
     
     return {
         "job_title": st.text_input("Job Title", job_titles[0] if job_titles else "Unknown"),
@@ -154,6 +151,7 @@ def match_candidates(connections_df, criteria):
 
     result_df["warm_introduction"] = result_df.apply(generate_intro, axis=1)
     return result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL", "warm_introduction"]]
+
 
 
 
