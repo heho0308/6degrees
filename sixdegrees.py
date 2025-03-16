@@ -19,11 +19,11 @@ nltk.download("averaged_perceptron_tagger")
 # Load AI Models
 @st.cache_resource
 def load_nlp_model():
-    return pipeline("ner", model="dbmdz/bert-large-cased-finetuned-conll03-english")
+    return pipeline("ner", model="dslim/bert-base-NER")  # Faster model
 
 @st.cache_resource
 def load_embedding_model():
-    return SentenceTransformer("all-MiniLM-L6-v2")
+    return SentenceTransformer("all-MiniLM-L6-v2")  # Fast & efficient
 
 @st.cache_resource
 def load_text_generator():
@@ -32,17 +32,33 @@ def load_text_generator():
 @st.cache_resource
 def load_spacy_model():
     try:
-        import spacy.cli
-        spacy.cli.download("en_core_web_sm")
         return spacy.load("en_core_web_sm")
+    except OSError:
+        return None  # Skip if spaCy model isn't available
     except OSError:
         st.error("Failed to load spaCy language model. Try running: python -m spacy download en_core_web_sm")
         return None
 
-nlp_model = load_nlp_model()
-embedder = load_embedding_model()
-text_generator = load_text_generator()
-nlp_spacy = load_spacy_model()
+# Load models dynamically only when needed
+def get_nlp_model():
+    if 'nlp_model' not in st.session_state:
+        st.session_state.nlp_model = load_nlp_model()
+    return st.session_state.nlp_model
+
+def get_embedding_model():
+    if 'embedder' not in st.session_state:
+        st.session_state.embedder = load_embedding_model()
+    return st.session_state.embedder
+
+def get_text_generator():
+    if 'text_generator' not in st.session_state:
+        st.session_state.text_generator = load_text_generator()
+    return st.session_state.text_generator
+
+def get_spacy_model():
+    if 'nlp_spacy' not in st.session_state:
+        st.session_state.nlp_spacy = load_spacy_model()
+    return st.session_state.nlp_spacy
 
 # ---------------------------
 # Helper Functions
@@ -95,6 +111,7 @@ def extract_job_criteria(url):
     if not job_desc:
         return None
     
+    nlp_model = get_nlp_model()
     extracted_entities = nlp_model(job_desc)
     job_titles = [ent['word'] for ent in extracted_entities if "JOB" in ent['entity']]
     hiring_companies = [ent['word'] for ent in extracted_entities if "ORG" in ent['entity']]
@@ -117,6 +134,7 @@ def match_candidates(connections_df, criteria):
     if connections_df is None or connections_df.empty:
         return pd.DataFrame()
 
+    embedder = get_embedding_model()
     job_embedding = embedder.encode(criteria["job_title"], convert_to_tensor=True)
     
     def score_candidate(row):
@@ -133,9 +151,9 @@ def match_candidates(connections_df, criteria):
     
     def generate_intro(row):
         prompt = f"Generate a warm introduction for {row['First Name']} {row['Last Name']} for a {criteria['job_title']} role at {criteria['company_name']}. Their background as a {row['Position']} at {row['Company']} makes them a great fit."
+        text_generator = get_text_generator()
         response = text_generator(prompt, max_length=100)
         return response[0]["generated_text"]
 
     result_df["warm_introduction"] = result_df.apply(generate_intro, axis=1)
     return result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL", "warm_introduction"]]
-
