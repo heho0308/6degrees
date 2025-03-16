@@ -10,7 +10,7 @@ from sentence_transformers import SentenceTransformer, util
 # Load AI Models
 @st.cache_resource
 def load_nlp_model():
-    return pipeline("ner", model="dslim/bert-base-NER")  # Smaller, faster model
+    return pipeline("ner", model="dslim/bert-base-NER", device=0)  # Optimized for speed  # Smaller, faster model
 
 @st.cache_resource
 def load_embedding_model():
@@ -18,7 +18,7 @@ def load_embedding_model():
 
 @st.cache_resource
 def load_text_generator():
-    return pipeline("text-generation", model="t5-small")  # Smaller, faster model
+    return pipeline("text-generation", model="t5-small", device=0)  # Optimized for faster inference  # Smaller, faster model
 
 @st.cache_resource
 def load_skill_extraction_model():
@@ -78,13 +78,17 @@ def extract_job_description(url):
     """Extract job description from a given URL."""
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers, timeout=5)  # Reduced timeout to prevent long waits
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
         paragraphs = [p.get_text(strip=True) for p in soup.find_all("p") if len(p.get_text(strip=True)) > 50]
         return " ".join(paragraphs) if paragraphs else None
+    except requests.exceptions.Timeout:
+        st.error("Request timed out. Try again later.")
+        return None
     except Exception as e:
         st.error(f"Failed to fetch job description: {e}")
+        return None
         return None
 
 # ---------------------------
@@ -147,6 +151,7 @@ def match_candidates(connections_df, criteria):
 
     result_df["warm_introduction"] = result_df.apply(generate_intro, axis=1)
     return result_df[["First Name", "Last Name", "Position", "Company", "match_score", "URL", "warm_introduction"]]
+
 
 
 
